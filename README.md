@@ -10,8 +10,8 @@ MCP-Server (und Claude-Plugin), mit dem Claude einen **Antrag auf Erlass eines M
 **Eingereicht wird nie durch diesen Server.** Die EDA-Datei geht unverändert über einen sicheren
 Übermittlungsweg (beA, § 130a Abs. 4 ZPO) an das Mahngericht. Das macht der Mensch.
 
-> Status: **v0.1, privat.** Ende-zu-Ende gegen das Live-Portal getestet (09.11.2026, Fantasiedaten,
-> bis zur Datenübersicht). Der EDA-Download selbst ist noch nicht live erprobt.
+> Status: **v0.1, privat.** Ende-zu-Ende gegen das Live-Portal getestet (09.11.2026, Fantasiedaten),
+> einschließlich EDA-Download. Eine echte Einreichung beim Mahngericht ist noch nicht erprobt.
 
 ## Warum eine Vorprüfung?
 
@@ -70,7 +70,7 @@ Umgebungsvariablen (optional):
 
 | Variable | Bedeutung |
 |---|---|
-| `MAHNANTRAG_AUSGABE` | Zielordner für EDA-Dateien (Standard `~/Documents/Mahnantraege`) |
+| `MAHNANTRAG_AUSGABE` | Zielordner für EDA-Dateien (Standard `~/Documents/Mahnantraege`); je Antrag ein Unterordner `<Zeitpunkt>_<Geschäftszeichen>`, darin die Datei unter dem **unveränderten Portal-Namen** (z. B. `EDA_MBA_09_11_2026_930226_<32 Hex>.eda`), schreibgeschützt |
 | `MAHNANTRAG_BROWSER_KANAL` | Playwright-Kanal (Standard `chrome`) |
 | `MAHNANTRAG_BROWSER_PFAD` | expliziter Pfad zu einem Chromium |
 
@@ -93,6 +93,7 @@ uv sync
 uv run pytest                                              # Unit-Tests, offline
 uv run python scripts/mcp_rauchtest.py                     # MCP über stdio
 uv run python scripts/live_probelauf.py tests/beispiel_antrag.json --sichtbar   # Live bis Übersicht, kein Download
+uv run python scripts/live_probelauf.py tests/beispiel_antrag.json --download /tmp/eda   # inkl. EDA-Download (nur Fantasiedaten!)
 ```
 
 Portalwissen: [`docs/referenz/`](docs/referenz/) (Masken, Felder, zwölf Fallen). Neue Erkenntnisse

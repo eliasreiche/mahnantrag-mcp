@@ -508,9 +508,12 @@ class PortalSitzung:
         async with self.page.expect_download(timeout=60_000) as dl_info:
             await f.locator('form input[type=image][src*="butt_speichern"]').first.click()
         dl = await dl_info.value
-        zielordner.mkdir(parents=True, exist_ok=True)
+        # Portal-Dateinamen nie ändern (z. B. EDA_MBA_09_11_2026_930208_<32 Hex>.eda, live belegt 09.11.2026).
+        # Zuordnung zum Fall über einen Unterordner je Geschäftszeichen und Zeitpunkt.
         gz = re.sub(r"[^A-Za-z0-9_-]+", "_", self.antrag.geschaeftszeichen or "ohne-az").strip("_")
-        ziel = zielordner / f"{datetime.now():%Y%m%d-%H%M%S}_{gz}_{dl.suggested_filename}"
+        ordner = zielordner / f"{datetime.now():%Y%m%d-%H%M%S}_{gz}"
+        ordner.mkdir(parents=True, exist_ok=False)
+        ziel = ordner / Path(dl.suggested_filename).name
         await dl.save_as(ziel)
         sha = hashlib.sha256(ziel.read_bytes()).hexdigest()
         ziel.chmod(0o444)  # schreibgeschützt: die Datei darf nicht verändert werden
@@ -522,7 +525,7 @@ class PortalSitzung:
             "sha256": sha,
             "hinweis": (
                 "Datei unverändert über einen sicheren Übermittlungsweg (beA) an das zuständige Mahngericht senden. "
-                "Nicht öffnen und speichern, nicht umbenennen-und-bearbeiten, nicht zusätzlich als Barcode einreichen."
+                "Nicht bearbeiten und nicht umbenennen; nicht zusätzlich als Barcode einreichen."
             ),
         }
 

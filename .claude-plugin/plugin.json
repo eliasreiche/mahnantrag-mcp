@@ -1,0 +1,8 @@
+{
+  "name": "mahnantrag",
+  "description": "Mahnbescheidsantrag über online-mahnantrag.de vorbereiten: Vorprüfung, Ausfüllen bis zur Datenübersicht, EDA-Download zur Einreichung per beA. Reicht selbst nichts ein.",
+  "version": "0.1.0",
+  "author": { "name": "Elias Reiche" },
+  "homepage": "https://github.com/eliasreiche/mahnantrag-mcp",
+  "repository": "https://github.com/eliasreiche/mahnantrag-mcp"
+}

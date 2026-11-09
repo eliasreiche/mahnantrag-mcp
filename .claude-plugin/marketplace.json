@@ -1,0 +1,11 @@
+{
+  "name": "mahnantrag",
+  "owner": { "name": "Elias Reiche" },
+  "plugins": [
+    {
+      "name": "mahnantrag",
+      "source": "./",
+      "description": "Mahnbescheidsantrag über online-mahnantrag.de vorbereiten: Vorprüfung, Ausfüllen bis zur Datenübersicht, EDA-Download zur Einreichung per beA. Reicht selbst nichts ein."
+    }
+  ]
+}

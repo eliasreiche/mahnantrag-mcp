@@ -1,0 +1,29 @@
+[project]
+name = "mahnantrag-mcp"
+version = "0.1.0"
+description = "MCP-Server: Mahnbescheidsantrag über online-mahnantrag.de vorbereiten (Vorprüfung + Ausfüller bis zur Datenübersicht)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp==2.2.0",
+  "playwright>=1.55",
+  "pydantic>=2.11",
+]
+
+[project.scripts]
+mahnantrag-mcp = "mahnantrag_mcp.server:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.25"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mahnantrag_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["live: läuft gegen das echte Portal (nur mit MAHNANTRAG_LIVE=1)"]

@@ -10,7 +10,7 @@ MCP-Server (und Claude-Plugin), mit dem Claude einen **Antrag auf Erlass eines M
 **Eingereicht wird nie durch diesen Server.** Die EDA-Datei geht unverändert über einen sicheren
 Übermittlungsweg (beA, § 130a Abs. 4 ZPO) an das Mahngericht. Das macht der Mensch.
 
-> Status: **v0.1, privat.** Ende-zu-Ende gegen das Live-Portal getestet (09.11.2026, Fantasiedaten),
+> Status: **v0.1, Work-in-Progress.** Ende-zu-Ende gegen das Live-Portal getestet (09.11.2026, Fantasiedaten),
 > einschließlich EDA-Download. Eine echte Einreichung beim Mahngericht ist noch nicht erprobt.
 
 ## Warum eine Vorprüfung?
@@ -58,7 +58,7 @@ Beim Barcode-Weg hält der Ausfüller auf der Übersicht an; Druck und Unterschr
 Voraussetzungen: [uv](https://docs.astral.sh/uv/), Google Chrome (sonst `uv run playwright install chromium`).
 
 **Als Plugin (Claude Code / Claude Desktop):** Marketplace `eliasreiche/mahnantrag-mcp` hinzufügen
-und Plugin `mahnantrag` installieren. Bei privatem Repo braucht der Rechner GitHub-Zugriff.
+und Plugin `mahnantrag` installieren. 
 
 **Direkt als MCP-Server:**
 
@@ -101,5 +101,11 @@ aus Live-Läufen stehen als Kommentar am Code (z. B. Begründungspflicht für so
 
 ## Quellen und Lizenz
 
-Portal-Analyse und Kataloge: [nbindewald-legal/mahnantrag-portal-reference](https://github.com/nbindewald-legal/mahnantrag-portal-reference),
-CC BY 4.0, siehe [NOTICE](NOTICE). Lizenz dieses Repos: noch offen (privat).
+Code: **GPL-3.0-or-later**, siehe [LICENSE](LICENSE).
+
+Ausgenommen sind die Inhalte aus der Portal-Analyse
+[nbindewald-legal/mahnantrag-portal-reference](https://github.com/nbindewald-legal/mahnantrag-portal-reference):
+`docs/referenz/` (unveränderte Kopie) und die daraus abgeleiteten Kataloge in
+`src/mahnantrag_mcp/daten/*.json` stehen unter **CC BY 4.0**. Namensnennung und Änderungen: [NOTICE](NOTICE).
+
+Keine Rechtsberatung. Die Verantwortung für Inhalt und Einreichung des Antrags liegt bei der antragstellenden Person bzw. dem Prozessbevollmächtigten.

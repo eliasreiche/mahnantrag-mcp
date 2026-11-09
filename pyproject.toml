@@ -3,6 +3,8 @@ name = "mahnantrag-mcp"
 version = "0.1.0"
 description = "MCP-Server: Mahnbescheidsantrag über online-mahnantrag.de vorbereiten (Vorprüfung + Ausfüller bis zur Datenübersicht)"
 readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.12"
 dependencies = [
   "mcp==2.2.0",

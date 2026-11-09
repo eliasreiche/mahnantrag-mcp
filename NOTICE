@@ -1,14 +1,17 @@
 mahnantrag-mcp
 Copyright 2026 Elias Reiche
+Lizenziert unter GPL-3.0-or-later (siehe LICENSE), mit Ausnahme der unten genannten Dateien.
 
 Dieses Projekt nutzt Inhalte aus "mahnantrag-portal-reference"
 (https://github.com/nbindewald-legal/mahnantrag-portal-reference), lizenziert unter
 Creative Commons Namensnennung 4.0 International (CC BY 4.0,
 https://creativecommons.org/licenses/by/4.0/).
 
-Übernommen und verändert:
+Diese Dateien stehen unter CC BY 4.0 (nicht unter der GPL):
 - docs/referenz/*.md: unveränderte Kopie, Stand des Commits in docs/referenz/QUELLE-COMMIT.txt
 - src/mahnantrag_mcp/daten/*.json: aus anspruchskatalog.md und rechtsform-katalog.md
-  maschinell extrahiert (scripts/kataloge_erzeugen.py)
-- Masken- und Feldlogik in src/mahnantrag_mcp/portal.py beruht auf implementierung-spec.md
-  und wurde am 09.11.2026 gegen das Live-Portal gegengeprüft.
+  maschinell extrahiert und ins JSON-Format umgewandelt (scripts/kataloge_erzeugen.py)
+
+Der übrige Code ist eigenständig geschrieben und steht unter der GPL. Die Masken- und
+Feldlogik in src/mahnantrag_mcp/portal.py stützt sich auf die Beschreibung in
+implementierung-spec.md und wurde am 09.11.2026 gegen das Live-Portal gegengeprüft.

@@ -660,7 +660,14 @@ class PortalSitzung:
         if sperrgrund:
             raise PortalFehler(sperrgrund)
         await self._knopf(z.frame)
-        z = await self._stabiler_zustand()
+        # Die Übersicht bleibt nach dem Klick kurz stehen und trägt noch ein Command-Feld;
+        # _warten() hält sie dann schon für die neue Maske. Bis zum Maskenwechsel weiter warten.
+        assert self.page
+        for _ in range(30):
+            z = await self._stabiler_zustand()
+            if z.formular != "MBUebersicht":
+                break
+            await self.page.wait_for_timeout(500)
         if z.formular == "Bundesland":
             raise SessionAbgelaufen("Das Portal ist auf die Bundeslandauswahl zurückgefallen. Die Sitzung ist abgelaufen.")
         if z.formular != "AbgabeEDA":

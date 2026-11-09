@@ -95,6 +95,20 @@ def _partei(b: Pruefbericht, wo: str, p: NatuerlichePerson | Firma) -> None:
             _adresse(b, f"{wo} Vertreter", gv.adresse)
 
 
+RVG_KATALOG_NR = ("24", "71")  # Rechtsanwaltshonorar / Verzugsschaden aus vorgerichtlicher RA-Tätigkeit
+
+
+def vorgerichtlich_ohne_verguetung(a: Antrag) -> bool:
+    """Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Vergütung. Das Portal warnt dann;
+    die Warnung darf der Ausfüller quittieren, weil die Vorprüfung sie schon gemeldet hat."""
+    au = a.auslagen
+    return bool(
+        au
+        and (au.vorgerichtlicher_gegenstandswert or au.anrechnungsbetrag_3305)
+        and not au.vorgerichtliche_anwaltsverguetung
+    )
+
+
 def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
     heute = heute or date.today()
     b = Pruefbericht()
@@ -124,15 +138,19 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
     if e.verguetung_mahnverfahren == "vereinbart" and not e.verguetung_vereinbart_betrag:
         b.fehler.append("Vereinbarte Vergütung gewählt, aber kein Betrag angegeben.")
 
-    if a.versandart is Versandart.BARCODE and pv is not None:
+    if pv is not None and not e.einreichung_durch_berufstraeger:
+        b.fehler.append(
+            "Prozessbevollmächtigter (Rechtsanwalt/-beistand) angegeben, aber 'einreichung_durch_berufstraeger' ist false."
+        )
+    if a.versandart is Versandart.BARCODE and e.einreichung_durch_berufstraeger:
         if not e.barcode_glaubhaftmachung:
             b.fehler.append(
-                "Barcode-Weg mit Rechtsanwalt: nach § 130d S. 2, 3 ZPO nur zulässig, wenn die elektronische "
-                "Einreichung vorübergehend unmöglich ist und das glaubhaft gemacht wird. EDA-Download wählen "
-                "oder die Glaubhaftmachung angeben."
+                "Barcode-Weg bei Einreichung durch Rechtsanwalt, Behörde oder Inkassodienstleister (auch in eigener "
+                "Sache): nach § 130d S. 2, 3 ZPO nur zulässig, wenn die elektronische Einreichung vorübergehend "
+                "unmöglich ist und das glaubhaft gemacht wird. EDA-Download wählen oder die Glaubhaftmachung angeben."
             )
         else:
-            b.warnungen.append("Barcode-Weg mit Rechtsanwalt: die Glaubhaftmachung muss dem Antrag gesondert beigefügt werden.")
+            b.warnungen.append("Barcode-Weg durch Berufsträger: die Glaubhaftmachung muss dem Antrag gesondert beigefügt werden.")
 
     # --- Parteien -------------------------------------------------------------------------
     _partei(b, "Antragsteller", a.antragsteller)
@@ -142,7 +160,10 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
 
     # --- Verfahren und Ansprüche ----------------------------------------------------------
     if a.verfahrensart != "NMV":
-        b.warnungen.append(f"Verfahrensart {a.verfahrensart}: Urkunden-/Scheck-/Wechselmahnverfahren bitte besonders prüfen.")
+        b.fehler.append(
+            f"Verfahrensart {a.verfahrensart}: Urkunden-, Scheck- und Wechselmahnverfahren sind in v0.1 nicht erprobt. "
+            "Bitte im Portal von Hand erfassen."
+        )
     if len(a.ansprueche) > 1:
         b.fehler.append("Mehrere Ansprüche sind in v0.1 nicht abgebildet (Reihenfolge und Index-Bindung im Portal unsicher).")
 
@@ -164,7 +185,9 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
             ab = asp.abtretung
             _laenge(b, f"{wo} früherer Gläubiger", ab.frueherer_glaeubiger, 35)
             _laenge(b, f"{wo} Abtretung Ort", ab.ort, 27)
-            if not ab.auslandskennzeichen and not re.fullmatch(r"\d{5}", ab.plz):
+            if ab.auslandskennzeichen and ab.auslandskennzeichen.upper() not in ("D", "DE"):
+                b.fehler.append(f"{wo}: früherer Gläubiger im Ausland. Auslandsfälle sind in v0.1 nicht abgebildet.")
+            elif not re.fullmatch(r"\d{5}", ab.plz):
                 b.fehler.append(f"{wo}: PLZ des früheren Gläubigers ist keine fünfstellige deutsche PLZ.")
             if ab.datum > heute:
                 b.fehler.append(f"{wo}: Abtretungsdatum liegt in der Zukunft.")
@@ -175,27 +198,41 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
             if z.ab < asp.datum_von:
                 b.warnungen.append(f"{wo}: Zinsbeginn liegt vor dem Anspruchsdatum.")
             if z.ueber_basiszins:
-                verbraucher_beteiligt = isinstance(a.antragsgegner, NatuerlichePerson)
+                # Ob ein Verbraucher beteiligt ist, ist eine Rechtsfrage (§ 13 BGB) und wird nicht aus der
+                # Parteiform geraten: der Mensch entscheidet es in `entscheidungen.verbraucher_beteiligt`.
                 if z.zinssatz > 9:
                     b.warnungen.append(f"{wo}: {z.zinssatz} Punkte über Basiszins übersteigt § 288 Abs. 2 BGB (9 Punkte).")
-                elif z.zinssatz > 5 and verbraucher_beteiligt:
+                elif z.zinssatz > 5 and e.verbraucher_beteiligt is None:
+                    b.fehler.append(
+                        f"{wo}: {z.zinssatz} Punkte über Basiszins setzen voraus, dass kein Verbraucher beteiligt ist "
+                        "(§ 288 Abs. 2 BGB). Bitte 'verbraucher_beteiligt' entscheiden."
+                    )
+                elif z.zinssatz > 5 and e.verbraucher_beteiligt:
                     b.warnungen.append(
-                        f"{wo}: {z.zinssatz} Punkte über Basiszins gegen eine natürliche Person. § 288 Abs. 2 BGB (9 Punkte) "
-                        "gilt nur, wenn kein Verbraucher beteiligt ist; sonst 5 Punkte (Abs. 1)."
+                        f"{wo}: {z.zinssatz} Punkte über Basiszins, obwohl ein Verbraucher beteiligt ist. Gesetzlich sind "
+                        "dann 5 Punkte vorgesehen (§ 288 Abs. 1 BGB); höhere Zinsen brauchen eine eigene Grundlage."
                     )
             elif z.zinssatz > 10:
                 b.warnungen.append(f"{wo}: fester Zinssatz von {z.zinssatz} % ist ungewöhnlich hoch. War 'über Basiszins' gemeint?")
 
     # --- Auslagen und Nebenforderungen ----------------------------------------------------
     au = a.auslagen
-    if au:
-        rvg_als_hauptforderung = any(x.katalog_nr in ("24", "71") for x in a.ansprueche)
-        if au.vorgerichtliche_anwaltsverguetung and rvg_als_hauptforderung:
+    rvg_haupt = any(x.katalog_nr in RVG_KATALOG_NR for x in a.ansprueche)
+    rvg_neben = bool(au and au.vorgerichtliche_anwaltsverguetung)
+    if rvg_haupt and rvg_neben:
+        b.fehler.append(
+            "Vorgerichtliche Anwaltsvergütung steht doppelt drin: als Hauptforderung (Kat.-Nr. 24/71) und als "
+            "Nebenforderung. Das verdoppelt die Forderung, und das Portal merkt es nicht. Eine Variante wählen."
+        )
+    else:
+        tatsaechlich = "als_hauptforderung" if rvg_haupt else "als_nebenforderung" if rvg_neben else "keine"
+        if tatsaechlich != e.vorgerichtliche_anwaltsverguetung:
             b.fehler.append(
-                "Vorgerichtliche Anwaltsvergütung steht doppelt drin: als Hauptforderung (Kat.-Nr. 24/71) und als "
-                "Nebenforderung. Das verdoppelt die Forderung, und das Portal merkt es nicht. Eine Variante wählen."
+                f"Entscheidung vorgerichtliche Anwaltsvergütung = '{e.vorgerichtliche_anwaltsverguetung}', "
+                f"die Antragsdaten ergeben aber '{tatsaechlich}'. Daten oder Entscheidung anpassen."
             )
-        if (au.vorgerichtlicher_gegenstandswert or au.anrechnungsbetrag_3305) and not au.vorgerichtliche_anwaltsverguetung:
+    if au:
+        if vorgerichtlich_ohne_verguetung(a):
             b.warnungen.append(
                 "Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Anwaltsvergütung. Das Portal warnt hier; "
                 "der Ausfüller quittiert die Warnung nur, wenn das so gewollt ist."
@@ -218,10 +255,11 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
     _laenge(b, "Geschäftszeichen", a.geschaeftszeichen, 35)
     if not a.geschaeftszeichen:
         b.warnungen.append("Kein Geschäftszeichen. Es ist der einzige Schlüssel, über den sich Post vom Mahngericht der Akte zuordnen lässt.")
-    if not e.gerichtsstand_automatisch_ok:
-        b.fehler.append(
-            "Gerichtsstand nicht bestätigt. Das Portal leitet das Prozessgericht aus der Gegneranschrift ab, und das "
-            "Weiterklicken gilt als Wahl nach § 35 ZPO. Eine abweichende Gerichtswahl ist in v0.1 nicht abgebildet."
+    if not e.prozessgericht_bestaetigt:
+        b.warnungen.append(
+            "Prozessgericht noch nicht bestätigt. Der Ausfüller hält an der Prozessgericht-Maske an und zeigt das vom "
+            "Portal abgeleitete Gericht; Weiterklicken gilt als Wahl nach § 35 ZPO. Eine abweichende Gerichtswahl ist "
+            "in v0.1 nicht abgebildet."
         )
 
     if a.bankverbindung:

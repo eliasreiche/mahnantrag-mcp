@@ -5,38 +5,80 @@
   "prozessbevollmaechtigter": {
     "bezeichnung": "Rechtsanwältin",
     "name": "Erika Musterfrau",
-    "adresse": {"strasse": "Musterallee 1", "plz": "10115", "ort": "Berlin"},
+    "adresse": {
+      "strasse": "Musterallee 1",
+      "plz": "10115",
+      "ort": "Berlin"
+    },
     "beauftragungsdatum": "2026-10-01"
   },
   "antragsteller": {
     "art": "firma",
-    "name_zeilen": ["Beispiel Handel UG", "(haftungsbeschränkt)"],
+    "name_zeilen": [
+      "Beispiel Handel UG",
+      "(haftungsbeschränkt)"
+    ],
     "rechtsform_code": "131",
-    "adresse": {"strasse": "Beispielweg 2", "plz": "10117", "ort": "Berlin"},
-    "gesetzliche_vertreter": [{"funktion": "Geschäftsführer", "name": "Max Mustermann"}]
+    "adresse": {
+      "strasse": "Beispielweg 2",
+      "plz": "10117",
+      "ort": "Berlin"
+    },
+    "gesetzliche_vertreter": [
+      {
+        "funktion": "Geschäftsführer",
+        "name": "Max Mustermann"
+      }
+    ]
   },
   "antragsgegner": {
     "art": "firma",
-    "name_zeilen": ["Testkunde Bau GmbH"],
+    "name_zeilen": [
+      "Testkunde Bau GmbH"
+    ],
     "rechtsform_code": "3",
-    "adresse": {"strasse": "Probestraße 3", "plz": "80331", "ort": "München"},
-    "gesetzliche_vertreter": [{"funktion": "Geschäftsführerin", "name": "Petra Probe"}]
+    "adresse": {
+      "strasse": "Probestraße 3",
+      "plz": "80331",
+      "ort": "München"
+    },
+    "gesetzliche_vertreter": [
+      {
+        "funktion": "Geschäftsführerin",
+        "name": "Petra Probe"
+      }
+    ]
   },
-  "ansprueche": [{
-    "katalog_nr": "11",
-    "belegart": "Rechnung",
-    "belegnummer": "RE-2026-0815",
-    "datum_von": "2026-08-15",
-    "betrag": "1234.56",
-    "zinsen": {"zinssatz": "9", "ueber_basiszins": true, "ab": "2026-09-15"}
-  }],
-  "auslagen": {"sonstige_auslage_art": "Verzugspauschale § 288 Abs. 5 BGB", "sonstige_auslage_betrag": "40", "sonstige_auslage_bezeichnung": "Verzug seit 15.09.2026"},
+  "ansprueche": [
+    {
+      "katalog_nr": "11",
+      "belegart": "Rechnung",
+      "belegnummer": "RE-2026-0815",
+      "datum_von": "2026-08-15",
+      "betrag": "1234.56",
+      "zinsen": {
+        "zinssatz": "9",
+        "ueber_basiszins": true,
+        "ab": "2026-09-15"
+      }
+    }
+  ],
+  "auslagen": {
+    "sonstige_auslage_art": "Verzugspauschale § 288 Abs. 5 BGB",
+    "sonstige_auslage_betrag": "40",
+    "sonstige_auslage_bezeichnung": "Verzug seit 15.09.2026"
+  },
   "geschaeftszeichen": "TEST-0001",
-  "bankverbindung": {"iban": "DE89 3704 0044 0532 0130 00"},
+  "bankverbindung": {
+    "iban": "DE89 3704 0044 0532 0130 00"
+  },
   "entscheidungen": {
     "gegenleistung": "bereits_erbracht",
     "streitiges_verfahren_bei_widerspruch": true,
     "verguetung_mahnverfahren": "gesetzlich",
-    "gerichtsstand_automatisch_ok": true
+    "einreichung_durch_berufstraeger": true,
+    "vorgerichtliche_anwaltsverguetung": "keine",
+    "verbraucher_beteiligt": false,
+    "prozessgericht_bestaetigt": "Amtsgericht München"
   }
 }

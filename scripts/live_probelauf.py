@@ -1,32 +1,46 @@
-"""Probelauf gegen das echte Portal bis zur Datenübersicht. Nur mit FANTASIEDATEN.
-uv run python scripts/live_probelauf.py tests/beispiel_antrag.json [--sichtbar] [--download ZIELORDNER]
-Ohne --download wird nichts heruntergeladen."""
-import asyncio, json, sys
+"""Probelauf gegen das echte Portal. NUR MIT FANTASIEDATEN.
+
+uv run python scripts/live_probelauf.py ANTRAG.json [--sichtbar] [--gericht-bestaetigen] [--download ZIELORDNER]
+
+--gericht-bestaetigen  am Haltepunkt Prozessgericht das angezeigte Gericht übernehmen (nur für Tests!)
+--download             EDA-Datei herunterladen; ohne den Schalter wird nichts heruntergeladen
+"""
+import asyncio
+import json
+import sys
 from pathlib import Path
+
 from mahnantrag_mcp.modell import Antrag
-from mahnantrag_mcp.portal import PortalFehler, PortalSitzung
+from mahnantrag_mcp.portal import GerichtBestaetigen, PortalFehler, PortalSitzung
 from mahnantrag_mcp.pruefung import pruefen
 
+
 async def main():
-    a = Antrag.model_validate(json.load(open(sys.argv[1])))
-    b = pruefen(a); print("PRUEFUNG", json.dumps(b.als_dict(), ensure_ascii=False, indent=1))
-    if not b.zulaessig: return
-    s = PortalSitzung()
+    antrag = Antrag.model_validate(json.load(open(sys.argv[1])))
+    bericht = pruefen(antrag)
+    print("PRUEFUNG", json.dumps(bericht.als_dict(), ensure_ascii=False, indent=1))
+    if not bericht.zulaessig:
+        return
+    sitzung = PortalSitzung()
     try:
-        r = await s.ausfuellen(a, sichtbar="--sichtbar" in sys.argv)
-        print(json.dumps({k: v for k, v in r.items() if k != "uebersicht"}, ensure_ascii=False, indent=1))
-        print("----- UEBERSICHT\n" + r["uebersicht"])
+        try:
+            ergebnis = await sitzung.ausfuellen(antrag, sichtbar="--sichtbar" in sys.argv)
+        except GerichtBestaetigen as e:
+            print("HALTEPUNKT GERICHT:", e)
+            if "--gericht-bestaetigen" not in sys.argv:
+                return
+            ergebnis = await sitzung.fortsetzen(e.gefunden)
+        print(json.dumps({k: v for k, v in ergebnis.items() if k not in ("uebersicht", "protokoll")}, ensure_ascii=False, indent=1))
+        print("----- UEBERSICHT\n" + ergebnis["uebersicht"][:1500])
         if "--download" in sys.argv:
             ziel = Path(sys.argv[sys.argv.index("--download") + 1])
-            d = await s.eda_herunterladen(ziel)
-            print("----- DOWNLOAD\n" + json.dumps(d, ensure_ascii=False, indent=1))
-            print("\n".join(s.protokoll.schritte[-4:]))
+            print("----- DOWNLOAD\n" + json.dumps(await sitzung.eda_herunterladen(ziel), ensure_ascii=False, indent=1))
     except PortalFehler as e:
         print("ANGEHALTEN:", e)
-        print("\n".join(s.protokoll.schritte))
-        try:
-            z = await s.zustand(); print("MASKE", z.schluessel); print(z.text[:1500])
-        except Exception as x: print("kein Zustand", x)
+        print("\n".join(sitzung.protokoll.schritte[-8:]))
     finally:
-        await s.schliessen()
+        print("PROTOKOLL-ENDE:", *sitzung.protokoll.schritte[-4:], sep="\n  ")
+        await sitzung.schliessen()
+
+
 asyncio.run(main())

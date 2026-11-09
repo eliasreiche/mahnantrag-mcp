@@ -70,12 +70,17 @@ def belegarten() -> dict[str, str]:
     return _laden("belegarten")
 
 
+KATALOGE = {
+    "anspruchsart": anspruchsarten,
+    "rechtsform": rechtsformen,
+    "belegart": belegarten,
+    "auslage": lambda: {art: art for art in AUSLAGEN_ARTEN},
+}
+
+
 def suchen(katalog: str, begriff: str = "") -> dict[str, str]:
-    quelle = {
-        "anspruchsart": anspruchsarten,
-        "rechtsform": rechtsformen,
-        "belegart": belegarten,
-        "auslage": lambda: {a: a for a in AUSLAGEN_ARTEN},
-    }[katalog]()
-    b = begriff.casefold().strip()
-    return {k: v for k, v in quelle.items() if not b or b in v.casefold() or b == k.casefold()}
+    """Einträge eines Katalogs, deren Name `begriff` enthält oder deren Code `begriff` ist."""
+    if katalog not in KATALOGE:
+        raise KeyError(katalog)
+    such = begriff.casefold().strip()
+    return {code: name for code, name in KATALOGE[katalog]().items() if not such or such in name.casefold() or such == code.casefold()}

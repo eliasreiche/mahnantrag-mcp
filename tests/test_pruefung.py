@@ -115,8 +115,25 @@ def test_barcode_ohne_anwalt_ok():
         x["rolle"] = "antragsteller"
         x["prozessbevollmaechtigter"] = None
         x["entscheidungen"]["verguetung_mahnverfahren"] = None
+        x["entscheidungen"]["einreichung_durch_berufstraeger"] = False
 
     assert bericht(d).zulaessig
+
+
+def test_barcode_anwalt_in_eigener_sache_gesperrt():
+    def d(x):
+        x["versandart"] = "Barcode"
+        x["rolle"] = "antragsteller"
+        x["prozessbevollmaechtigter"] = None
+        x["entscheidungen"]["verguetung_mahnverfahren"] = None
+        x["entscheidungen"]["einreichung_durch_berufstraeger"] = True
+
+    assert any("130d" in f for f in bericht(d).fehler)
+
+
+def test_pv_erzwingt_berufstraeger():
+    b = bericht(lambda d: d["entscheidungen"].update(einreichung_durch_berufstraeger=False))
+    assert any("einreichung_durch_berufstraeger" in f for f in b.fehler)
 
 
 def test_pv_ohne_verguetungsentscheidung():
@@ -124,9 +141,10 @@ def test_pv_ohne_verguetungsentscheidung():
     assert any("Vergütung" in f for f in b.fehler)
 
 
-def test_gerichtsstand_muss_bestaetigt_sein():
-    b = bericht(lambda d: d["entscheidungen"].update(gerichtsstand_automatisch_ok=False))
-    assert any("35 ZPO" in f for f in b.fehler)
+def test_gericht_unbestaetigt_ist_warnung_kein_fehler():
+    b = bericht(lambda d: d["entscheidungen"].update(prozessgericht_bestaetigt=""))
+    assert b.zulaessig
+    assert any("35 ZPO" in w for w in b.warnungen)
 
 
 def test_iban_pruefziffer():
@@ -139,7 +157,18 @@ def test_auslage_ohne_begruendung():
     assert any("Begründung" in f for f in b.fehler)
 
 
-def test_neun_punkte_gegen_verbraucher_warnt():
+def test_neun_punkte_verlangen_verbraucherentscheidung():
+    b = bericht(lambda d: d["entscheidungen"].update(verbraucher_beteiligt=None))
+    assert any("verbraucher_beteiligt" in f for f in b.fehler)
+
+
+def test_neun_punkte_mit_verbraucher_warnt():
+    b = bericht(lambda d: d["entscheidungen"].update(verbraucher_beteiligt=True))
+    assert b.zulaessig
+    assert any("288 Abs. 1" in w for w in b.warnungen)
+
+
+def test_verbraucher_wird_nicht_aus_parteiform_geraten():
     def d(x):
         x["antragsgegner"] = {
             "art": "person",
@@ -149,9 +178,35 @@ def test_neun_punkte_gegen_verbraucher_warnt():
             "adresse": {"strasse": "Probestraße 3", "plz": "80331", "ort": "München"},
         }
 
+    # natürliche Person, aber vom Menschen als Unternehmerin eingestuft -> keine Verbraucher-Warnung
     b = bericht(d)
     assert b.zulaessig
-    assert any("288" in w for w in b.warnungen)
+    assert not any("288" in w for w in b.warnungen)
+
+
+def test_sonderverfahren_abgelehnt():
+    b = bericht(lambda d: d.update(verfahrensart="UMV"))
+    assert any("Urkunden" in f for f in b.fehler)
+
+
+def test_zedent_im_ausland_abgelehnt():
+    def d(x):
+        x["ansprueche"][0]["abtretung"] = {
+            "frueherer_glaeubiger": "Alt AG", "plz": "1010", "ort": "Wien", "auslandskennzeichen": "A", "datum": "2026-09-01"
+        }
+
+    assert any("Ausland" in f for f in bericht(d).fehler)
+
+
+def test_rvg_entscheidung_muss_zu_daten_passen():
+    b = bericht(lambda d: d["entscheidungen"].update(vorgerichtliche_anwaltsverguetung="als_nebenforderung"))
+    assert any("ergeben aber 'keine'" in f for f in b.fehler)
+
+    def neben(x):
+        x["auslagen"]["vorgerichtliche_anwaltsverguetung"] = {"betrag": "200"}
+        x["entscheidungen"]["vorgerichtliche_anwaltsverguetung"] = "als_nebenforderung"
+
+    assert bericht(neben).zulaessig
 
 
 def test_mehrere_ansprueche_v01_abgelehnt():

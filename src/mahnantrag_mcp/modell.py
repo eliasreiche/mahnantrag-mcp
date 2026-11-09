@@ -185,11 +185,32 @@ class Entscheidungen(_Basis):
         None, description="Nur bei Prozessbevollmächtigtem: Vergütung im Mahnbescheid"
     )
     verguetung_vereinbart_betrag: Decimal | None = None
-    gerichtsstand_automatisch_ok: bool = Field(
+    einreichung_durch_berufstraeger: bool = Field(
         description=(
-            "Bestätigung, dass das vom Portal aus der Gegneranschrift abgeleitete Prozessgericht gewollt ist. "
-            "Die Wahl gilt als Ausübung des Wahlrechts nach § 35 ZPO."
+            "Stellt eine Rechtsanwältin/ein Rechtsanwalt, eine Behörde oder ein registrierter Inkassodienstleister "
+            "den Antrag, auch in eigener Sache? Dann ist nur die elektronische Einreichung zulässig (§ 702 Abs. 2, § 130d ZPO)."
         )
+    )
+    vorgerichtliche_anwaltsverguetung: Literal["keine", "als_hauptforderung", "als_nebenforderung"] = Field(
+        description=(
+            "Wie die vorgerichtliche Anwaltsvergütung geltend gemacht wird: gar nicht, als Hauptforderung "
+            "(Kat.-Nr. 24 oder 71) oder als Nebenforderung. Nie beides, sonst verdoppelt sich die Forderung."
+        )
+    )
+    verbraucher_beteiligt: bool | None = Field(
+        None,
+        description=(
+            "Ist an dem Rechtsgeschäft ein Verbraucher beteiligt (§ 288 Abs. 2 BGB)? Pflicht, wenn mehr als "
+            "5 Prozentpunkte über dem Basiszinssatz verlangt werden."
+        ),
+    )
+    prozessgericht_bestaetigt: str = Field(
+        "",
+        description=(
+            "Name des Prozessgerichts, das der Mensch bestätigt hat, nachdem der Ausfüller es angezeigt hat "
+            "(z. B. 'Amtsgericht München'). Leer = der Ausfüller hält an der Prozessgericht-Maske an und zeigt "
+            "das vom Portal abgeleitete Gericht. Weiterklicken gilt als Wahl nach § 35 ZPO."
+        ),
     )
     barcode_glaubhaftmachung: str = Field(
         "",

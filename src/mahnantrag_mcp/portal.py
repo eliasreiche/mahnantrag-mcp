@@ -20,11 +20,14 @@ Die heruntergeladene EDA-Datei wird nie verändert, nur gespeichert und gehasht.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -45,6 +48,17 @@ WARNUNG_VORGERICHTLICH = (
     "ohne dass hierfür eine Anwaltsvergütung angegeben wurde"
 )
 BEKANNTE_DIALOGE = ("Bitte lesen Sie die Hinweise zum EDA-Download",)
+MAX_QUITTIERUNGEN = 3  # so oft wird eine erlaubte Warnung höchstens durch erneutes Absenden quittiert
+
+# Vor jedem Klick bekommt das alte Dokument jedes Inhaltsframes eine Markierung. Ein frisch geladenes
+# Dokument hat sie nicht. So erkennt _warten() die neue Maske auch dann, wenn das Portal langsam antwortet
+# oder dieselbe Maske (Formular/Command) mit Warnung oder Fehler zurückkommt.
+INHALTSFRAMES = ("form", "main")
+JS_MARKIEREN = "()=>{document.__mahnantragAlt=true}"
+JS_BEREITSCHAFT = (
+    "()=>({geladen:document.readyState==='complete',alt:!!document.__mahnantragAlt,"
+    "command:!!document.querySelector('form input[name=Command]')})"
+)
 
 # Knopf-Namen der Portalmasken (input[type=image]); je Maske live belegt
 KNOPF_NEUER_ANTRAG = "neuer Antrag"
@@ -102,6 +116,94 @@ def gericht_passt(bestaetigt: str, gefunden: str | None) -> bool:
         return re.sub(r"\s+", " ", s).strip().casefold()
 
     return bool(bestaetigt and gefunden and norm(bestaetigt) == norm(gefunden))
+
+
+def neue_maske_bereit(d: dict | None) -> bool:
+    """Ergebnis von JS_BEREITSCHAFT: fertig geladen, nicht das markierte alte Dokument, Formular mit Command."""
+    return bool(d and d.get("geladen") and not d.get("alt") and d.get("command"))
+
+
+def erlaubte_warnungen(antrag: Antrag | None) -> list[str]:
+    """Portal-Warnungen, die der Ausfüller quittieren darf. Die Warnung zur vorgerichtlichen Tätigkeit
+    ohne Anwaltsvergütung nur, wenn der Mensch diese Konstellation ausdrücklich bestätigt hat."""
+    if (
+        antrag
+        and vorgerichtlich_ohne_verguetung(antrag)
+        and antrag.entscheidungen.vorgerichtlich_ohne_verguetung_bestaetigt is True
+    ):
+        return [WARNUNG_VORGERICHTLICH]
+    return []
+
+
+def browserfehler_text(was: str, meldung: str, abgewiesene_dialoge: list[str]) -> str:
+    """Playwright-Fehler als Halt-Meldung. Nur die erste Zeile, das Call-Log bleibt draußen."""
+    zeile = (meldung.strip().splitlines() or ["ohne Meldung"])[0]
+    text = f"Browser- oder Portalfehler beim {was}: {zeile}"
+    if abgewiesene_dialoge:
+        text += f" Das Portal hat einen unbekannten Dialog gezeigt, der abgewiesen wurde: '{abgewiesene_dialoge[-1]}'."
+    return text + " Bitte im Browser prüfen."
+
+
+def download_fehlertext(meldung: str, neue_abgewiesene_dialoge: list[str]) -> str:
+    """Halt-Meldung, wenn die EDA-Datei nicht ankommt. Ein abgewiesener Dialog ist dann meist die Ursache."""
+    if neue_abgewiesene_dialoge:
+        return (
+            "Die EDA-Datei kam nicht an. Das Portal hat nach dem Klick auf Speichern einen unbekannten Dialog gezeigt, "
+            f"der abgewiesen wurde: '{neue_abgewiesene_dialoge[-1]}'. Bitte im Browser prüfen."
+        )
+    return browserfehler_text("EDA-Download (Datei kam nicht an)", meldung, [])
+
+
+def uebersicht_text(text: str) -> str:
+    """Datenübersicht ab ihrer Überschrift, vollständig. Ohne Überschrift der ganze Maskentext."""
+    i = text.find("MB-Antrag Übersicht")
+    return text[i:] if i >= 0 else text
+
+
+def verguetung_betrag_feld(verguetung: str | None, betrag: Decimal | None) -> str:
+    """Inhalt von _bVerguetungBetrag: der Betrag nur bei 'vereinbart', sonst die Vorbelegung '0,00 EUR'."""
+    return fmt.betrag(betrag if verguetung == "vereinbart" else None)
+
+
+def ablageordner_anlegen(zielordner: Path, geschaeftszeichen: str, jetzt: datetime) -> Path:
+    """Unterordner je Fall anlegen und Schreibrecht prüfen, bevor der Download angestoßen wird."""
+    gz = re.sub(r"[^A-Za-z0-9_-]+", "_", geschaeftszeichen or "ohne-az").strip("_") or "ohne-az"
+    ordner = Path(zielordner).expanduser() / f"{jetzt:%Y%m%d-%H%M%S}_{gz}"
+    try:
+        ordner.mkdir(parents=True, exist_ok=False)
+        with tempfile.TemporaryFile(dir=ordner):
+            pass  # Schreibprobe; die Probedatei verschwindet sofort wieder
+    except OSError as e:
+        _leeren_ordner_entfernen(ordner)
+        raise PortalFehler(
+            f"Ablageordner {ordner} lässt sich nicht anlegen oder nicht beschreiben ({e.strerror or e}). "
+            "Bitte MAHNANTRAG_AUSGABE prüfen. Es wurde noch nichts heruntergeladen, die Datenübersicht steht noch."
+        ) from e
+    return ordner
+
+
+def _leeren_ordner_entfernen(ordner: Path) -> None:
+    try:
+        ordner.rmdir()  # nur wenn leer; eine gespeicherte Datei bleibt immer liegen
+    except OSError:
+        pass
+
+
+def _browserfehler_als_halt(was: str):
+    """Playwright-Fehler (Frame neu aufgebaut, Zeitüberschreitung, Portal nicht erreichbar) enden als PortalFehler,
+    damit der Server sie wie jeden anderen Halt behandelt. Programmierfehler bleiben unberührt."""
+
+    def deko(fn):
+        @functools.wraps(fn)
+        async def huelle(self: "PortalSitzung", *args, **kwargs):
+            try:
+                return await fn(self, *args, **kwargs)
+            except PlaywrightError as e:
+                raise PortalFehler(browserfehler_text(was, str(e), self.protokoll.abgewiesene_dialoge)) from e
+
+        return huelle
+
+    return deko
 
 
 def download_sperrgrund(formular: str, command: str, fehler_da: str | None, warnungen: list[str], erlaubt: list[str]) -> str | None:
@@ -239,18 +341,37 @@ class PortalSitzung:
             raise PortalFehler("Kein Inhaltsframe gefunden. Ist das Portal erreichbar oder im Wartungsfenster?")
         return f
 
-    async def _warten(self) -> None:
-        """Warten, bis der Inhaltsframe ein Formular mit Command trägt."""
+    async def _markieren(self) -> None:
+        """Vor einem Klick: die aktuell geladenen Dokumente der Inhaltsframes als 'alt' markieren."""
         assert self.page
-        await self.page.wait_for_timeout(400)
+        for name in INHALTSFRAMES:
+            f = self.page.frame(name=name)
+            if f is None:
+                continue
+            try:
+                await f.evaluate(JS_MARKIEREN)
+            except PlaywrightError:
+                pass  # Frame wird gerade neu aufgebaut; sein nächstes Dokument ist ohnehin neu
+
+    async def _klicken_und_warten(self, klick: Callable[[], Awaitable[object]]) -> None:
+        """Jeder Klick, der eine neue Maske lädt, läuft hierüber: markieren, klicken, auf neues Dokument warten."""
+        await self._markieren()
+        await klick()
+        await self._warten()
+
+    async def _warten(self) -> None:
+        """Warten, bis der Inhaltsframe ein neu geladenes Dokument (ohne Markierung) mit Formular und Command trägt.
+
+        Kriterium ist ein neues Dokument, nicht eine andere Maske: Warnungen und Fehler kommen in derselben
+        Maske zurück. Solange das alte, markierte Dokument noch steht, wird weiter gewartet.
+        """
+        assert self.page
         for _ in range(60):
             f = self.page.frame(name="form") or self.page.frame(name="main")  # kann kurz fehlen
             bereit = False
             if f is not None:
                 try:
-                    bereit = await f.evaluate(
-                        "()=>document.readyState==='complete'&&!!document.querySelector('form input[name=Command]')"
-                    )
+                    bereit = neue_maske_bereit(await f.evaluate(JS_BEREITSCHAFT))
                 except PlaywrightError:
                     pass  # Frame wird gerade neu aufgebaut
             if bereit:
@@ -260,15 +381,36 @@ class PortalSitzung:
                     raise PortalFehler("Unbekannter Dialog des Portals: " + self.protokoll.abgewiesene_dialoge[-1])
                 return
             await self.page.wait_for_timeout(250)
+        if self.protokoll.abgewiesene_dialoge:
+            # z. B. ein Prüf-alert() des Portals, der das Absenden verhindert hat
+            raise PortalFehler(
+                "Die neue Maske kam nicht. Das Portal hat einen unbekannten Dialog gezeigt, der abgewiesen wurde: "
+                + self.protokoll.abgewiesene_dialoge[-1]
+            )
         raise PortalFehler("Die Maske ist nicht fertig geladen (Zeitüberschreitung).")
 
     async def zustand(self) -> Zustand:
-        f = self._inhaltsframe()
-        d = await f.evaluate(
-            """()=>{const fo=document.querySelector('form');const c=fo&&fo.querySelector('input[name=Command]');
-            return {n:fo?fo.getAttribute('name')||'':'',c:c?c.value:'',t:document.body?document.body.innerText:''}}"""
-        )
-        return Zustand(f, d["n"], d["c"], _normalisieren(d["t"]))
+        """Aktuelle Maske lesen. Wird der Frame gerade neu aufgebaut, kurz erneut versuchen."""
+        assert self.page
+        letzter: PlaywrightError | None = None
+        for versuch in range(8):
+            f = self.page.frame(name="form") or self.page.frame(name="main")  # kann kurz fehlen
+            if f is None:
+                if versuch == 7:
+                    self._inhaltsframe()  # wirft PortalFehler mit Hinweis auf Erreichbarkeit
+                await self.page.wait_for_timeout(250)
+                continue
+            try:
+                d = await f.evaluate(
+                    """()=>{const fo=document.querySelector('form');const c=fo&&fo.querySelector('input[name=Command]');
+                    return {n:fo?fo.getAttribute('name')||'':'',c:c?c.value:'',t:document.body?document.body.innerText:''}}"""
+                )
+                return Zustand(f, d["n"], d["c"], _normalisieren(d["t"]))
+            except PlaywrightError as e:
+                letzter = e
+                await self.page.wait_for_timeout(250)
+        assert letzter is not None
+        raise PortalFehler(browserfehler_text("Lesen der Maske", str(letzter), self.protokoll.abgewiesene_dialoge)) from letzter
 
     async def _stabiler_zustand(self) -> Zustand:
         z = await self.zustand()
@@ -316,37 +458,44 @@ class PortalSitzung:
         loc = f.locator(sel)
         if await loc.count() < 1:
             raise PortalFehler(f"Kein Knopf gefunden ({sel}).")
-        await loc.first.click()
-        await self._warten()
+        await self._klicken_und_warten(loc.first.click)
 
     async def _link(self, f: Frame, command: str) -> None:
         loc = f.locator(f'a[href*="Command={command}"]')
         if await loc.count() < 1:
             raise PortalFehler(f"Link {command} nicht gefunden.")
-        await loc.first.evaluate("e=>e.click()")
-        await self._warten()
+        await self._klicken_und_warten(lambda: loc.first.evaluate("e=>e.click()"))
 
     # ------------------------------------------------------------------ Ablauf
     def _erlaubte_warnungen(self) -> list[str]:
-        return [WARNUNG_VORGERICHTLICH] if self.antrag and vorgerichtlich_ohne_verguetung(self.antrag) else []
+        return erlaubte_warnungen(self.antrag)
 
     async def _absenden(self, z: Zustand, knopf: str | None = None) -> None:
-        """Absenden und Text-Warnungen behandeln (gleiche Maske kommt mit 'Warnung:' zurück)."""
+        """Absenden und Text-Warnungen behandeln (gleiche Maske kommt mit 'Warnung:' zurück).
+
+        Das Ergebnis jedes Klicks, auch des letzten Quittier-Klicks, wird gelesen, bevor aufgegeben wird.
+        """
         await self._knopf(z.frame, knopf)
-        for _ in range(3):
+        quittiert = 0
+        while True:
             neu = await self._stabiler_zustand()
             if neu.schluessel == z.schluessel and neu.fehler:
                 raise PortalFehler("Das Portal meldet einen Fehler: " + " | ".join(neu.fehler))
             if neu.schluessel != z.schluessel or not neu.warnungen:
                 return
+            if quittiert >= MAX_QUITTIERUNGEN:
+                raise PortalFehler(
+                    f"Warnung ließ sich nicht quittieren ({quittiert}x unverändert erneut abgesendet): " + " | ".join(neu.warnungen)
+                )
             unbekannt = unbekannte_warnungen(neu.warnungen, self._erlaubte_warnungen())
             if unbekannt:
                 raise PortalFehler("Unbekannte oder nicht freigegebene Warnung des Portals: " + " | ".join(unbekannt))
             self.protokoll.quittierte_warnungen.extend(neu.warnungen)
             self.protokoll.add(f"Warnung quittiert in {z.schluessel}")
+            quittiert += 1
             await self._knopf(neu.frame, knopf)  # unverändert erneut absenden = quittieren
-        raise PortalFehler("Warnung ließ sich nicht quittieren.")
 
+    @_browserfehler_als_halt("Ausfüllen")
     async def ausfuellen(self, antrag: Antrag, sichtbar: bool) -> dict:
         self.antrag = antrag
         self.ablauf = Ablauf(
@@ -355,12 +504,21 @@ class PortalSitzung:
         )
         await self.oeffnen(sichtbar)
         assert self.page
-        await self.page.goto(START_URL, wait_until="networkidle")
-        await self.page.get_by_text("Ich stimme zu", exact=True).click()
-        await self._warten()
+        try:
+            await self.page.goto(START_URL, wait_until="networkidle")
+        except PlaywrightError as e:
+            raise PortalFehler(browserfehler_text("Aufrufen von online-mahnantrag.de (Portal nicht erreichbar?)", str(e), [])) from e
+        zustimmen = self.page.get_by_text("Ich stimme zu", exact=True)
+        try:
+            await self._klicken_und_warten(lambda: zustimmen.click(timeout=15_000))
+        except PlaywrightError as e:
+            raise PortalFehler(
+                browserfehler_text("Bestätigen des Datenschutzhinweises ('Ich stimme zu')", str(e), self.protokoll.abgewiesene_dialoge)
+            ) from e
         self.protokoll.add("Datenschutzhinweis bestätigt")
         return await self._lauf()
 
+    @_browserfehler_als_halt("Fortsetzen")
     async def fortsetzen(self, prozessgericht_bestaetigt: str) -> dict:
         """Nach dem Haltepunkt Prozessgericht: Bestätigung übernehmen und weiterlaufen."""
         if not self.antrag or not self.page:
@@ -425,8 +583,7 @@ class PortalSitzung:
             )
             if await loc.count() != 1:
                 raise PortalFehler("Weg 'Ich bin Prozessbevollmächtigter' nicht eindeutig gefunden.")
-            await loc.evaluate("e=>e.click()")
-            await self._warten()
+            await self._klicken_und_warten(lambda: loc.evaluate("e=>e.click()"))
         else:
             await self._knopf(z.frame, KNOPF_ICH_BIN_ANTRAGSTELLER)
 
@@ -478,7 +635,10 @@ class PortalSitzung:
         f, anspruch = z.frame, self.antrag.ansprueche[0]
         await self._text(f, "KatNr", anspruch.katalog_nr)
         await self._auswahl(f, "_bKatalogArt", anspruch.katalog_nr)
-        await self._auswahl(f, "_aspAspGr", anspruch.belegart)
+        if anspruch.belegart:
+            # Leere Belegart: Liste nicht anfassen, die Vorbelegung der frischen Maske ist leer (Spec 3.15).
+            # Der Wert der Leeroption ist nicht belegt, deshalb wird er nicht ausgewählt (live ungeprüft).
+            await self._auswahl(f, "_aspAspGr", anspruch.belegart)
         await self._text(f, "_aspAspGrZusatz", anspruch.belegart_zusatz)
         await self._text(f, "_bAspNr", anspruch.belegnummer)
         await self._text(f, "_bVon", fmt.datum(anspruch.datum_von))
@@ -560,7 +720,7 @@ class PortalSitzung:
         if not e.verguetung_mahnverfahren:
             raise PortalFehler("Vergütung im Mahnverfahren nicht entschieden.")
         await self._radio(z.frame, "_bVerguetungMM", e.verguetung_mahnverfahren.upper())
-        await self._text(z.frame, "_bVerguetungBetrag", fmt.betrag(e.verguetung_vereinbart_betrag))
+        await self._text(z.frame, "_bVerguetungBetrag", verguetung_betrag_feld(e.verguetung_mahnverfahren, e.verguetung_vereinbart_betrag))
         await self._absenden(z)
 
     async def _m_prozessgericht(self, z: Zustand) -> None:
@@ -638,7 +798,7 @@ class PortalSitzung:
             "offene_warnungen": z.warnungen,
             "download_moeglich": sperrgrund is None,
             "download_sperrgrund": sperrgrund,
-            "uebersicht": _ausschnitt(z.text, "MB-Antrag Übersicht", 6000),
+            "uebersicht": uebersicht_text(z.text),  # vollständig, nie gekürzt: der Mensch gibt genau das frei
             "hinweis": (
                 "Der Ausfüller hat auf der Datenübersicht angehalten. Bitte die Übersicht prüfen. "
                 "Checkbox-Zustände (Erklärungen) sind dort nicht ablesbar; sie stehen im eigenen Antrag. "
@@ -649,6 +809,7 @@ class PortalSitzung:
             "dialoge": self.protokoll.dialoge,
         }
 
+    @_browserfehler_als_halt("EDA-Download")
     async def eda_herunterladen(self, zielordner: Path) -> dict:
         if not self.antrag or self.antrag.versandart is not Versandart.EDA:
             raise PortalFehler("Download gibt es nur für Versandart EDA-Download.")
@@ -659,15 +820,18 @@ class PortalSitzung:
         sperrgrund = download_sperrgrund(z.formular, z.command, await self._fehler_da(z), z.warnungen, self._erlaubte_warnungen())
         if sperrgrund:
             raise PortalFehler(sperrgrund)
-        await self._knopf(z.frame)
-        # Die Übersicht bleibt nach dem Klick kurz stehen und trägt noch ein Command-Feld;
-        # _warten() hält sie dann schon für die neue Maske. Bis zum Maskenwechsel weiter warten.
-        assert self.page
-        for _ in range(30):
-            z = await self._stabiler_zustand()
-            if z.formular != "MBUebersicht":
-                break
-            await self.page.wait_for_timeout(500)
+        # Ablageordner vor dem ersten Klick anlegen und prüfen: nach dem Speichern-Klick ist der Download verbraucht.
+        ordner = ablageordner_anlegen(zielordner, self.antrag.geschaeftszeichen, datetime.now())
+        try:
+            return await self._eda_abholen(z, ordner)
+        except BaseException:
+            _leeren_ordner_entfernen(ordner)
+            raise
+
+    async def _eda_abholen(self, z: Zustand, ordner: Path) -> dict:
+        assert self.antrag
+        await self._knopf(z.frame)  # wartet auf ein neues Dokument, nicht auf die stehende Übersicht
+        z = await self._stabiler_zustand()
         if z.formular == "Bundesland":
             raise SessionAbgelaufen("Das Portal ist auf die Bundeslandauswahl zurückgefallen. Die Sitzung ist abgelaufen.")
         if z.formular != "AbgabeEDA":
@@ -677,18 +841,28 @@ class PortalSitzung:
             raise PortalFehler("Bestätigung 'hinweisGelesen' nicht gefunden.")
         await haken.check()  # Pflicht-Gate, sonst blockierender alert()
         assert self.page
-        async with self.page.expect_download(timeout=60_000) as dl_info:
-            await z.frame.locator('form input[type=image][src*="butt_speichern"]').first.click()
-        download = await dl_info.value
+        dialoge_vorher = len(self.protokoll.abgewiesene_dialoge)
+        try:
+            async with self.page.expect_download(timeout=60_000) as dl_info:
+                await z.frame.locator('form input[type=image][src*="butt_speichern"]').first.click()
+            download = await dl_info.value
+        except PlaywrightError as e:
+            raise PortalFehler(
+                download_fehlertext(str(e), self.protokoll.abgewiesene_dialoge[dialoge_vorher:])
+            ) from e
         # Portal-Dateinamen nie ändern (z. B. EDA_MBA_09_11_2026_930208_<32 Hex>.eda, live belegt 09.11.2026).
-        # Zuordnung zum Fall über einen Unterordner je Geschäftszeichen und Zeitpunkt.
-        gz = re.sub(r"[^A-Za-z0-9_-]+", "_", self.antrag.geschaeftszeichen or "ohne-az").strip("_")
-        ordner = zielordner / f"{datetime.now():%Y%m%d-%H%M%S}_{gz}"
-        ordner.mkdir(parents=True, exist_ok=False)
+        # Zuordnung zum Fall über den Unterordner je Geschäftszeichen und Zeitpunkt.
         ziel = ordner / Path(download.suggested_filename).name
-        await download.save_as(ziel)
-        sha = hashlib.sha256(ziel.read_bytes()).hexdigest()
-        ziel.chmod(0o444)  # schreibgeschützt: die Datei darf nicht verändert werden
+        try:
+            await download.save_as(ziel)
+            sha = hashlib.sha256(ziel.read_bytes()).hexdigest()
+            ziel.chmod(0o444)  # schreibgeschützt: die Datei darf nicht verändert werden
+        except (OSError, PlaywrightError) as e:
+            raise PortalFehler(
+                f"Die EDA-Datei kam an, ließ sich aber nicht unter {ziel} speichern ({e.__class__.__name__}: "
+                f"{str(e).strip().splitlines()[0] if str(e).strip() else 'ohne Meldung'}). Browser bleibt offen; "
+                "die Datei im Browser-Downloadbereich prüfen, bevor portal_schliessen aufgerufen wird."
+            ) from e
         self.letzte_aktivitaet = datetime.now()
         self.protokoll.add(f"EDA-Datei gespeichert: {ziel.name} sha256={sha}")
         return {

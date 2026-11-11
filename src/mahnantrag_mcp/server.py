@@ -33,8 +33,9 @@ Dieser Server bereitet einen Antrag auf Erlass eines Mahnbescheids über online-
 Regeln:
 - Immer zuerst antrag_pruefen. Fehler dem Menschen zeigen und nicht selbst "wegentscheiden".
 - Die Felder in `entscheidungen` sind rechtliche Weichen (Gegenleistung, streitiges Verfahren,
-  Vergütung, Einreichung durch Berufsträger, vorgerichtliche Anwaltsvergütung, Verbraucherbeteiligung,
-  Prozessgericht). Nie raten oder vorbelegen, immer den Menschen fragen.
+  Vergütung, Einreichung durch Berufsträger, vorgerichtliche Anwaltsvergütung, Gegenstandswert oder
+  Anrechnungsbetrag ohne vorgerichtliche Vergütung, Verbraucherbeteiligung, Prozessgericht).
+  Nie raten oder vorbelegen, immer den Menschen fragen.
 - Prozessgericht: portal_ausfuellen hält an und nennt das vom Portal abgeleitete Gericht. Dem Menschen
   zeigen und erklären, dass Weiterklicken als Wahl nach § 35 ZPO gilt. Erst nach seiner Bestätigung
   ausfuellen_fortsetzen mit genau diesem Gerichtsnamen aufrufen.
@@ -192,8 +193,17 @@ async def portal_status() -> dict:
     """Aktuelle Maske der offenen Portal-Sitzung, Minuten seit der letzten Aktivität und Protokoll."""
     if not _sitzung or not _sitzung.page:
         return {"offen": False}
-    z = await _sitzung.zustand()
     minuten = _sitzung.minuten_seit_aktivitaet()
+    try:
+        z = await _sitzung.zustand()
+    except PortalFehler as e:
+        return {
+            "offen": True,
+            "maske": None,
+            "grund": f"Maske nicht lesbar: {e}",
+            "minuten_seit_aktivitaet": round(minuten, 1) if minuten is not None else None,
+            "protokoll": _sitzung.protokoll.schritte[-15:],
+        }
     return {
         "offen": True,
         "maske": z.schluessel,

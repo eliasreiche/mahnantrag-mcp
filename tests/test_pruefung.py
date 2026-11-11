@@ -92,10 +92,21 @@ def test_rvg_doppelt():
     assert any("doppelt" in f for f in bericht(d).fehler)
 
 
-def test_gegenstandswert_ohne_verguetung_ist_warnung():
+def test_gegenstandswert_ohne_verguetung_verlangt_entscheidung():
     b = bericht(lambda d: d["auslagen"].update(vorgerichtlicher_gegenstandswert="1000"))
-    assert b.zulaessig
-    assert any("Gegenstandswert" in w for w in b.warnungen)
+    assert any("vorgerichtlich_ohne_verguetung_bestaetigt" in f for f in b.fehler)
+
+    def abgelehnt(d):
+        d["auslagen"]["anrechnungsbetrag_3305"] = "50"
+        d["entscheidungen"]["vorgerichtlich_ohne_verguetung_bestaetigt"] = False
+
+    assert any("vorgerichtlich_ohne_verguetung_bestaetigt" in f for f in bericht(abgelehnt).fehler)
+
+    def bestaetigt(d):
+        d["auslagen"]["vorgerichtlicher_gegenstandswert"] = "1000"
+        d["entscheidungen"]["vorgerichtlich_ohne_verguetung_bestaetigt"] = True
+
+    assert bericht(bestaetigt).zulaessig
 
 
 def test_barcode_fuer_anwalt_nur_mit_glaubhaftmachung():
@@ -162,6 +173,36 @@ def test_neun_punkte_verlangen_verbraucherentscheidung():
     assert any("verbraucher_beteiligt" in f for f in b.fehler)
 
 
+@pytest.mark.parametrize("zinssatz", ["5.5", "9", "9.5", "12"])
+def test_ueber_fuenf_punkte_immer_verbraucherentscheidung(zinssatz):
+    def d(x):
+        x["ansprueche"][0]["zinsen"]["zinssatz"] = zinssatz
+        x["entscheidungen"]["verbraucher_beteiligt"] = None
+
+    assert any("verbraucher_beteiligt" in f for f in bericht(d).fehler)
+
+
+def test_ueber_neun_punkte_warnt_zusaetzlich():
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].update(zinssatz="12"))
+    assert b.zulaessig  # verbraucher_beteiligt=False ist entschieden
+    assert any("9 Punkte" in w for w in b.warnungen)
+
+    def mit_verbraucher(d):
+        d["ansprueche"][0]["zinsen"]["zinssatz"] = "12"
+        d["entscheidungen"]["verbraucher_beteiligt"] = True
+
+    w = bericht(mit_verbraucher).warnungen
+    assert any("9 Punkte" in x for x in w) and any("288 Abs. 1" in x for x in w)
+
+
+def test_fuenf_punkte_ohne_verbraucherentscheidung_ok():
+    def d(x):
+        x["ansprueche"][0]["zinsen"]["zinssatz"] = "5"
+        x["entscheidungen"]["verbraucher_beteiligt"] = None
+
+    assert bericht(d).zulaessig
+
+
 def test_neun_punkte_mit_verbraucher_warnt():
     b = bericht(lambda d: d["entscheidungen"].update(verbraucher_beteiligt=True))
     assert b.zulaessig
@@ -224,3 +265,133 @@ def test_unbekannte_felder_werden_abgelehnt():
     d["erfundenes_feld"] = 1
     with pytest.raises(Exception):
         Antrag.model_validate(d)
+
+
+# --- Vergütungsbetrag nur bei 'vereinbart' ----------------------------------------------
+@pytest.mark.parametrize("verguetung", ["gesetzlich", "verzicht", None])
+def test_verguetungsbetrag_ohne_vereinbart_ist_fehler(verguetung):
+    def d(x):
+        x["entscheidungen"]["verguetung_mahnverfahren"] = verguetung
+        x["entscheidungen"]["verguetung_vereinbart_betrag"] = "300"
+
+    assert any("vereinbarte Vergütung angegeben" in f for f in bericht(d).fehler)
+
+
+def test_vereinbarte_verguetung_mit_betrag_ok_und_null_abgelehnt():
+    def mit(betrag):
+        def d(x):
+            x["entscheidungen"]["verguetung_mahnverfahren"] = "vereinbart"
+            x["entscheidungen"]["verguetung_vereinbart_betrag"] = betrag
+
+        return d
+
+    assert bericht(mit("300")).zulaessig
+    assert any("größer als 0" in f for f in bericht(mit("0")).fehler)
+
+
+# --- Leere Pflichtangaben ----------------------------------------------------------------
+def _person(d):
+    d["antragsgegner"] = {
+        "art": "person", "anrede": "Frau", "vorname": "Petra", "nachname": "Probe",
+        "adresse": {"strasse": "Probestraße 3", "plz": "80331", "ort": "München"},
+    }
+
+
+@pytest.mark.parametrize("feld", ["vorname", "nachname"])
+def test_leerer_personenname(feld):
+    def d(x):
+        _person(x)
+        x["antragsgegner"][feld] = "  "
+
+    assert any(f"Antragsgegner {feld.capitalize()} ist leer" in f for f in bericht(d).fehler)
+
+
+@pytest.mark.parametrize(
+    "zeilen,meldung",
+    [(["", "Testkunde Bau GmbH"], "erste Zeile"), (["Testkunde", "", "Bau GmbH"], "leere Zeile zwischen")],
+)
+def test_leere_firmennamenzeilen(zeilen, meldung):
+    b = bericht(lambda d: d["antragsgegner"].update(name_zeilen=zeilen))
+    assert any(meldung in f for f in b.fehler)
+
+
+def test_leere_zeile_am_ende_ist_ok():
+    assert bericht(lambda d: d["antragsgegner"].update(name_zeilen=["Testkunde Bau GmbH", ""])).zulaessig
+
+
+def test_leerer_vertreter_und_pv_name():
+    b = bericht(lambda d: d["antragsgegner"]["gesetzliche_vertreter"][0].update(name=""))
+    assert any("Vertreter-Name ist leer" in f for f in b.fehler)
+    b = bericht(lambda d: d["prozessbevollmaechtigter"].update(name=""))
+    assert any("Prozessbevollmächtigter Name ist leer" in f for f in b.fehler)
+
+
+def test_abtretung_ohne_glaeubiger_und_ort():
+    def d(x):
+        x["ansprueche"][0]["abtretung"] = {"frueherer_glaeubiger": "", "plz": "10115", "ort": "", "datum": "2026-09-01"}
+
+    fehler = bericht(d).fehler
+    assert any("früherer Gläubiger ist leer" in f for f in fehler)
+    assert any("Ort des früheren Gläubigers ist leer" in f for f in fehler)
+
+
+# --- Beträge und Zinsen ------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "aenderung",
+    [
+        lambda d: d["auslagen"].update(vordruck_porto="0"),
+        lambda d: d["auslagen"].update(sonstige_auslage_betrag="-40"),
+        lambda d: d["auslagen"].update(mahnkosten={"betrag": "0"}),
+        lambda d: d["prozessbevollmaechtigter"].update(auslagen_statt_pauschale="-1"),
+        lambda d: d["ansprueche"][0]["zinsen"].update(zu_verzinsender_betrag="0"),
+        lambda d: d["auslagen"].update(
+            anrechnungsbetrag_3305="-5", vorgerichtlicher_gegenstandswert="1000"
+        ),
+    ],
+)
+def test_nicht_positive_betraege(aenderung):
+    def d(x):
+        x["entscheidungen"]["vorgerichtlich_ohne_verguetung_bestaetigt"] = True
+        aenderung(x)
+
+    assert any("größer als 0" in f for f in bericht(d).fehler)
+
+
+def test_gegenstandswert_null_abgelehnt():
+    def d(x):
+        x["auslagen"]["vorgerichtlicher_gegenstandswert"] = "0"
+
+    assert any("Gegenstandswert der vorgerichtlichen Tätigkeit" in f for f in bericht(d).fehler)
+
+
+def test_negativer_zinssatz():
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].update(zinssatz="-1"))
+    assert any("negativ" in f for f in b.fehler)
+    b = bericht(lambda d: d["auslagen"].update(mahnkosten={"betrag": "5", "zinssatz": "-2", "zins_ab": "2026-10-01"}))
+    assert any("Mahnkosten Zinsen: Zinssatz -2 ist negativ" in f for f in b.fehler)
+
+
+def test_null_punkte_ueber_basiszins_ok_fester_nullsatz_warnt():
+    assert bericht(lambda d: d["ansprueche"][0]["zinsen"].update(zinssatz="0")).zulaessig
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].update(zinssatz="0", ueber_basiszins=False))
+    assert b.zulaessig and any("0 %" in w for w in b.warnungen)
+
+
+def test_zinsende_vor_beginn():
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].update(bis="2026-09-01"))
+    assert any("Zins-Ende" in f for f in b.fehler)
+    b = bericht(lambda d: d["auslagen"].update(
+        mahnkosten={"betrag": "5", "zinssatz": "5", "zins_ueber_basiszins": True, "zins_ab": "2026-10-01", "zins_bis": "2026-09-01"}
+    ))
+    assert any("Mahnkosten: Zins-Ende" in f for f in b.fehler)
+
+
+def test_nebenforderung_zinssatz_ohne_beginn():
+    b = bericht(lambda d: d["auslagen"].update(mahnkosten={"betrag": "5", "zinssatz": "5", "zins_ueber_basiszins": True}))
+    assert any("ohne Zinsbeginn" in f for f in b.fehler)
+    b = bericht(lambda d: d["auslagen"].update(mahnkosten={"betrag": "5", "zins_ab": "2026-10-01"}))
+    assert any("ohne Zinssatz" in f for f in b.fehler)
+    ok = bericht(lambda d: d["auslagen"].update(
+        mahnkosten={"betrag": "5", "zinssatz": "5", "zins_ueber_basiszins": True, "zins_ab": "2026-10-01"}
+    ))
+    assert ok.zulaessig, ok.fehler

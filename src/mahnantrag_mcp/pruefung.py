@@ -42,6 +42,27 @@ def _laenge(b: Pruefbericht, wo: str, wert: str, maximal: int) -> None:
         b.fehler.append(f"{wo}: {len(wert)} Zeichen, das Portal erlaubt höchstens {maximal}.")
 
 
+def _pflicht(b: Pruefbericht, wo: str, wert: str) -> None:
+    if not wert:
+        b.fehler.append(f"{wo} ist leer.")
+
+
+def _positiv(b: Pruefbericht, wo: str, wert: Decimal | None) -> None:
+    """Beträge, die angegeben sind, müssen größer als 0 sein. 0,00 EUR ist die Vorbelegung des Portals und
+    wirkt wie 'nicht angegeben'; dann das Feld leer lassen."""
+    if wert is not None and wert <= 0:
+        b.fehler.append(f"{wo}: Betrag {wert} muss größer als 0 sein (sonst weglassen).")
+
+
+def _zinssatz(b: Pruefbericht, wo: str, satz: Decimal, ueber_basiszins: bool) -> None:
+    """Negative Zinssätze sind unzulässig. 0 Punkte über Basiszins ist sinnvoll (= Basiszinssatz);
+    ein fester Satz von 0 % ergibt keine Zinsen und ist deshalb nur eine Warnung."""
+    if satz < 0:
+        b.fehler.append(f"{wo}: Zinssatz {satz} ist negativ.")
+    elif satz == 0 and not ueber_basiszins:
+        b.warnungen.append(f"{wo}: fester Zinssatz von 0 % ergibt keine Zinsen. War 'über Basiszins' gemeint?")
+
+
 def _adresse(b: Pruefbericht, wo: str, a: Adresse) -> None:
     _laenge(b, f"{wo} Straße", a.strasse, 35)
     _laenge(b, f"{wo} Ort", a.ort, 27)
@@ -66,12 +87,19 @@ def _iban_ok(iban: str) -> bool:
 
 def _partei(b: Pruefbericht, wo: str, p: NatuerlichePerson | Firma) -> None:
     if isinstance(p, NatuerlichePerson):
+        _pflicht(b, f"{wo} Vorname", p.vorname)
+        _pflicht(b, f"{wo} Nachname", p.nachname)
         _laenge(b, f"{wo} Vorname", p.vorname, 35)
         _laenge(b, f"{wo} Nachname", p.nachname, 35)
         _adresse(b, wo, p.adresse)
         return
     for i, z in enumerate(p.name_zeilen, 1):
         _laenge(b, f"{wo} Firmenname Zeile {i}", z, 35)
+    gefuellt = [i for i, z in enumerate(p.name_zeilen) if z]
+    if not p.name_zeilen or not p.name_zeilen[0]:
+        b.fehler.append(f"{wo}: die erste Zeile des Firmennamens ist leer.")
+    elif gefuellt and len(gefuellt) != gefuellt[-1] + 1:
+        b.fehler.append(f"{wo}: leere Zeile zwischen gefüllten Zeilen des Firmennamens.")
     if p.rechtsform_code not in kataloge.rechtsformen():
         b.fehler.append(f"{wo}: Rechtsform-Code '{p.rechtsform_code}' steht nicht im Katalog.")
     else:
@@ -90,6 +118,7 @@ def _partei(b: Pruefbericht, wo: str, p: NatuerlichePerson | Firma) -> None:
     if len(p.gesetzliche_vertreter) > 1:
         b.fehler.append(f"{wo}: Mehr als ein gesetzlicher Vertreter ist in v0.1 nicht abgebildet.")
     for gv in p.gesetzliche_vertreter:
+        _pflicht(b, f"{wo} Vertreter-Name", gv.name)
         _laenge(b, f"{wo} Vertreter-Name", gv.name, 35)
         if gv.adresse:
             _adresse(b, f"{wo} Vertreter", gv.adresse)
@@ -100,7 +129,8 @@ RVG_KATALOG_NR = ("24", "71")  # Rechtsanwaltshonorar / Verzugsschaden aus vorge
 
 def vorgerichtlich_ohne_verguetung(a: Antrag) -> bool:
     """Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Vergütung. Das Portal warnt dann;
-    die Warnung darf der Ausfüller quittieren, weil die Vorprüfung sie schon gemeldet hat."""
+    der Ausfüller quittiert die Warnung nur, wenn der Mensch das in
+    `entscheidungen.vorgerichtlich_ohne_verguetung_bestaetigt` ausdrücklich bestätigt hat."""
     au = a.auslagen
     return bool(
         au
@@ -125,7 +155,9 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
         b.fehler.append("Rolle 'antragsteller', aber Prozessbevollmächtigter angegeben. Rolle prüfen.")
 
     if pv:
+        _pflicht(b, "Prozessbevollmächtigter Name", pv.name)
         _laenge(b, "Prozessbevollmächtigter Name", pv.name, 105)
+        _positiv(b, "Prozessbevollmächtigter Auslagen statt Pauschale", pv.auslagen_statt_pauschale)
         if pv.kennziffer and not re.fullmatch(r"\d{8}", pv.kennziffer):
             b.fehler.append("Prozessvertreter-Kennziffer muss genau 8 Ziffern haben (ggf. führende 0).")
         if not pv.kennziffer and pv.adresse is None:
@@ -135,8 +167,15 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
         if pv.beauftragungsdatum and pv.beauftragungsdatum > heute:
             b.fehler.append("Beauftragungsdatum liegt in der Zukunft.")
 
-    if e.verguetung_mahnverfahren == "vereinbart" and not e.verguetung_vereinbart_betrag:
+    if e.verguetung_mahnverfahren == "vereinbart" and e.verguetung_vereinbart_betrag is None:
         b.fehler.append("Vereinbarte Vergütung gewählt, aber kein Betrag angegeben.")
+    elif e.verguetung_vereinbart_betrag is not None and e.verguetung_mahnverfahren != "vereinbart":
+        b.fehler.append(
+            f"Betrag für eine vereinbarte Vergütung angegeben, aber Vergütung im Mahnverfahren = "
+            f"'{e.verguetung_mahnverfahren or 'nicht entschieden'}'. Der Betrag würde nicht übernommen; "
+            "Entscheidung oder Betrag anpassen."
+        )
+    _positiv(b, "Vereinbarte Vergütung", e.verguetung_vereinbart_betrag)
 
     if pv is not None and not e.einreichung_durch_berufstraeger:
         b.fehler.append(
@@ -183,6 +222,8 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
             b.fehler.append(f"{wo}: Zeitraum-Ende liegt vor dem Beginn.")
         if asp.abtretung:
             ab = asp.abtretung
+            _pflicht(b, f"{wo} früherer Gläubiger", ab.frueherer_glaeubiger)
+            _pflicht(b, f"{wo} Ort des früheren Gläubigers", ab.ort)
             _laenge(b, f"{wo} früherer Gläubiger", ab.frueherer_glaeubiger, 35)
             _laenge(b, f"{wo} Abtretung Ort", ab.ort, 27)
             if ab.auslandskennzeichen and ab.auslandskennzeichen.upper() not in ("D", "DE"):
@@ -193,6 +234,10 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
                 b.fehler.append(f"{wo}: Abtretungsdatum liegt in der Zukunft.")
         if asp.zinsen:
             z = asp.zinsen
+            _zinssatz(b, f"{wo} Zinsen", z.zinssatz, z.ueber_basiszins)
+            _positiv(b, f"{wo} zu verzinsender Betrag", z.zu_verzinsender_betrag)
+            if z.bis and z.bis < z.ab:
+                b.fehler.append(f"{wo}: Zins-Ende liegt vor dem Zinsbeginn.")
             if z.ab > heute:
                 b.warnungen.append(f"{wo}: Zinsbeginn liegt in der Zukunft.")
             if z.ab < asp.datum_von:
@@ -202,7 +247,7 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
                 # Parteiform geraten: der Mensch entscheidet es in `entscheidungen.verbraucher_beteiligt`.
                 if z.zinssatz > 9:
                     b.warnungen.append(f"{wo}: {z.zinssatz} Punkte über Basiszins übersteigt § 288 Abs. 2 BGB (9 Punkte).")
-                elif z.zinssatz > 5 and e.verbraucher_beteiligt is None:
+                if z.zinssatz > 5 and e.verbraucher_beteiligt is None:
                     b.fehler.append(
                         f"{wo}: {z.zinssatz} Punkte über Basiszins setzen voraus, dass kein Verbraucher beteiligt ist "
                         "(§ 288 Abs. 2 BGB). Bitte 'verbraucher_beteiligt' entscheiden."
@@ -232,10 +277,34 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
                 f"die Antragsdaten ergeben aber '{tatsaechlich}'. Daten oder Entscheidung anpassen."
             )
     if au:
-        if vorgerichtlich_ohne_verguetung(a):
-            b.warnungen.append(
-                "Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Anwaltsvergütung. Das Portal warnt hier; "
-                "der Ausfüller quittiert die Warnung nur, wenn das so gewollt ist."
+        _positiv(b, "Vordruck/Porto", au.vordruck_porto)
+        _positiv(b, "Sonstige Auslage", au.sonstige_auslage_betrag)
+        _positiv(b, "Gegenstandswert der vorgerichtlichen Tätigkeit", au.vorgerichtlicher_gegenstandswert)
+        _positiv(b, "Anrechnungsbetrag (Nr. 3305 VV RVG)", au.anrechnungsbetrag_3305)
+        for name, nf in [
+            ("Mahnkosten", au.mahnkosten),
+            ("Auskunftskosten", au.auskunftskosten),
+            ("Bankrücklastkosten", au.bankruecklastkosten),
+            ("Inkassokosten", au.inkassokosten),
+            ("Vorgerichtliche Anwaltsvergütung", au.vorgerichtliche_anwaltsverguetung),
+        ]:
+            if nf is None:
+                continue
+            _positiv(b, name, nf.betrag)
+            if nf.zinssatz is not None:
+                _zinssatz(b, f"{name} Zinsen", nf.zinssatz, nf.zins_ueber_basiszins)
+                if nf.zins_ab is None:
+                    b.fehler.append(f"{name}: Zinssatz ohne Zinsbeginn (zins_ab).")
+            elif nf.zins_ab or nf.zins_bis:
+                # ohne Zinssatz trägt der Ausfüller keine Zinsdaten ein; nicht still verwerfen
+                b.fehler.append(f"{name}: Zinsbeginn/-ende ohne Zinssatz.")
+            if nf.zins_ab and nf.zins_bis and nf.zins_bis < nf.zins_ab:
+                b.fehler.append(f"{name}: Zins-Ende liegt vor dem Zinsbeginn.")
+        if vorgerichtlich_ohne_verguetung(a) and e.vorgerichtlich_ohne_verguetung_bestaetigt is not True:
+            b.fehler.append(
+                "Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Anwaltsvergütung. Das Portal warnt hier. "
+                "Ist das so gewollt? Bitte 'vorgerichtlich_ohne_verguetung_bestaetigt' entscheiden; nur bei true "
+                "quittiert der Ausfüller die Warnung des Portals."
             )
         if au.sonstige_auslage_art and au.sonstige_auslage_art not in kataloge.AUSLAGEN_ARTEN:
             b.fehler.append(f"Auslagenart '{au.sonstige_auslage_art}' steht nicht in der Portal-Liste.")

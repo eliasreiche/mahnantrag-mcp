@@ -18,7 +18,9 @@ schickt der Mensch über beA an das Mahngericht.
    - Vergütung im Mahnverfahren: gesetzlich, vereinbart oder Verzicht?
    - Stellt ein Rechtsanwalt, eine Behörde oder ein Inkassodienstleister den Antrag, auch in eigener Sache?
    - Vorgerichtliche Anwaltsvergütung: keine, als Hauptforderung **oder** als Nebenforderung, nie beides.
-   - Bei mehr als 5 Punkten über Basiszins: Ist ein Verbraucher beteiligt (§ 288 BGB)?
+   - Gegenstandswert der vorgerichtlichen Tätigkeit oder Anrechnungsbetrag ohne vorgerichtliche Vergütung:
+     Ist das so gewollt (`vorgerichtlich_ohne_verguetung_bestaetigt`)? Nur dann quittiert der Ausfüller die Portal-Warnung.
+   - Bei mehr als 5 Punkten über Basiszins (auch über 9): Ist ein Verbraucher beteiligt (§ 288 BGB)?
 3. **`antrag_pruefen`.** Fehler und Warnungen wörtlich zeigen. Fehler löst der Mensch.
    Firmennamen über 35 Zeichen bricht der Mensch um, weil der Umbruch im Bescheid erscheint.
 4. **`portal_ausfuellen`** mit `sichtbar=true`, nachdem der Mensch dem Datenschutzhinweis des

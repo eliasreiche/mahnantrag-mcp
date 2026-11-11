@@ -197,11 +197,19 @@ class Entscheidungen(_Basis):
             "(Kat.-Nr. 24 oder 71) oder als Nebenforderung. Nie beides, sonst verdoppelt sich die Forderung."
         )
     )
+    vorgerichtlich_ohne_verguetung_bestaetigt: bool | None = Field(
+        None,
+        description=(
+            "Soll ein Gegenstandswert der vorgerichtlichen Tätigkeit oder ein Anrechnungsbetrag (Nr. 3305 VV RVG) "
+            "angegeben werden, ohne dass eine vorgerichtliche Anwaltsvergütung geltend gemacht wird? Pflicht, wenn "
+            "die Antragsdaten das ergeben. Das Portal warnt dann; der Ausfüller quittiert diese Warnung nur bei true."
+        ),
+    )
     verbraucher_beteiligt: bool | None = Field(
         None,
         description=(
             "Ist an dem Rechtsgeschäft ein Verbraucher beteiligt (§ 288 Abs. 2 BGB)? Pflicht, wenn mehr als "
-            "5 Prozentpunkte über dem Basiszinssatz verlangt werden."
+            "5 Prozentpunkte über dem Basiszinssatz verlangt werden (auch bei mehr als 9 Punkten)."
         ),
     )
     prozessgericht_bestaetigt: str = Field(

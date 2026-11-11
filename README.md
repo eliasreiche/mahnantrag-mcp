@@ -27,11 +27,12 @@ Namen oder eine doppelt eingetragene vorgerichtliche Anwaltsvergütung gehen ohn
 - PLZ, IBAN-Prüfziffer, Daten in der Zukunft
 - vorgerichtliche Anwaltsvergütung als Haupt- **und** Nebenforderung (verdoppelt die Forderung)
 - Barcode-Weg für Rechtsanwälte nur mit Glaubhaftmachung (§ 130d S. 2, 3 ZPO)
-- 9 Punkte über Basiszins gegen natürliche Personen (§ 288 Abs. 1 vs. 2 BGB)
+- mehr als 5 Punkte über Basiszins ohne Entscheidung zur Verbraucherbeteiligung (§ 288 Abs. 1 vs. 2 BGB)
 - Kosten des Mahnverfahrens als Auslage (§ 699 Abs. 3 ZPO)
 - rechtliche Weichen, die ausdrücklich entschieden sein müssen: Gegenleistung, streitiges Verfahren,
   Vergütung, Einreichung durch Berufsträger (auch in eigener Sache), vorgerichtliche Anwaltsvergütung als
-  Haupt- oder Nebenforderung, Verbraucherbeteiligung (§ 288 BGB), Prozessgericht
+  Haupt- oder Nebenforderung, Gegenstandswert oder Anrechnungsbetrag ohne vorgerichtliche Vergütung,
+  Verbraucherbeteiligung (§ 288 BGB), Prozessgericht
 
 ## Tools
 

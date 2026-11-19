@@ -763,7 +763,7 @@ class PortalSitzung:
         if isinstance(partei, NatuerlichePerson):
             await self._auswahl(f, "_bAnrede", "1" if partei.anrede == "Herr" else "2")
             await self._text(f, "_bName1", partei.vorname)
-            await self._text(f, "_bName2", partei.nachname)
+            await self._text(f, "_bName2", partei.nachname_portal)  # bei Einzelunternehmen mit Geschäftsbezeichnung
             if rolle == "Antragsgegner":
                 assert self.antrag
                 await self._haken(f, "_bNatoTruppenstatut", self.antrag.antragsgegner_nato_truppenstatut)

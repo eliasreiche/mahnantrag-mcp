@@ -395,3 +395,52 @@ def test_nebenforderung_zinssatz_ohne_beginn():
         mahnkosten={"betrag": "5", "zinssatz": "5", "zins_ueber_basiszins": True, "zins_ab": "2026-10-01"}
     ))
     assert ok.zulaessig, ok.fehler
+
+
+# --- Einzelunternehmen ----------------------------------------------------------------
+
+
+def _einzelunternehmer(d, zusatz="Inh. Malerbetrieb Probe", nachname="Probe"):
+    d["antragsgegner"] = {
+        "art": "person",
+        "anrede": "Frau",
+        "vorname": "Petra",
+        "nachname": nachname,
+        "geschaeftsbezeichnung": zusatz,
+        "adresse": d["antragsgegner"]["adresse"],
+    }
+
+
+def test_einzelunternehmen_als_person_zulaessig_mit_hinweis():
+    b = bericht(_einzelunternehmer)
+    assert b.zulaessig, b.fehler
+    assert any("Einzelunternehmen" in w and "Probe, Inh. Malerbetrieb Probe" in w for w in b.warnungen)
+
+
+def test_nachname_portal_haengt_geschaeftsbezeichnung_an():
+    d = deepcopy(BEISPIEL)
+    _einzelunternehmer(d)
+    assert Antrag.model_validate(d).antragsgegner.nachname_portal == "Probe, Inh. Malerbetrieb Probe"
+    _einzelunternehmer(d, zusatz="")
+    assert Antrag.model_validate(d).antragsgegner.nachname_portal == "Probe"
+
+
+def test_geschaeftsbezeichnung_zu_lang_ist_fehler():
+    b = bericht(lambda d: _einzelunternehmer(d, zusatz="Inhaberin Malerbetrieb und Gerüstbau Probe"))
+    assert any("Nachname mit Geschäftsbezeichnung" in f and "höchstens 35" in f for f in b.fehler)
+
+
+def test_person_ohne_geschaeftsbezeichnung_ohne_hinweis():
+    b = bericht(lambda d: _einzelunternehmer(d, zusatz=""))
+    assert b.zulaessig, b.fehler
+    assert not any("Einzelunternehmen" in w for w in b.warnungen)
+
+
+def test_firma_ohne_vertreter_nennt_personen_weg():
+    b = bericht(lambda d: d["antragsgegner"].update(gesetzliche_vertreter=[]))
+    assert any("geschaeftsbezeichnung" in f for f in b.fehler)
+
+
+def test_einzelfirma_mit_vertreter_warnt():
+    b = bericht(lambda d: d["antragsgegner"].update(rechtsform_code="87"))
+    assert any("Einzelunternehmen hat keinen gesetzlichen Vertreter" in w for w in b.warnungen)

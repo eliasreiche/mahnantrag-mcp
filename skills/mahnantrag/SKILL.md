@@ -12,6 +12,14 @@ schickt der Mensch über beA an das Mahngericht.
 
 1. **Daten sammeln.** `antrag_schema` zeigt alle Felder. Aus den Unterlagen übernehmen, was belegt ist.
    Katalognummern und Rechtsform-Codes nur über `kataloge_suchen`.
+   **Einzelunternehmen** (Inhaberbetrieb, Einzelfirma, e.K.) als Antragsteller oder Antragsgegner: Das Portal
+   bildet sie nicht eigens ab, und der Firma-Weg verlangt einen gesetzlichen Vertreter, den es hier nicht gibt.
+   Dem Menschen diesen Hinweis geben und **fragen, ob es so gehandhabt werden soll**: Erfassung als natürliche
+   Person (Partei ist der Inhaber), die Geschäftsbezeichnung hinter dem Nachnamen, z. B.
+   „Müller, Inh. Malerbetrieb Müller“. Dazu sagen, dass das ein Praxishinweis ist und keine Vorgabe der
+   Mahngerichte. Nur bei Zustimmung `geschaeftsbezeichnung` setzen. Den Wortlaut des Zusatzes legt der Mensch
+   fest (Nachname, Komma und Zusatz zusammen höchstens 35 Zeichen); nie selbst abkürzen. Ohne Zustimmung
+   entscheidet der Mensch, wie die Partei erfasst wird, notfalls von Hand im Portal.
 2. **Rechtliche Weichen erfragen, nie raten** (Feld `entscheidungen`):
    - Hängt der Anspruch von einer Gegenleistung ab, und ist sie erbracht?
    - Bei Widerspruch automatisch ins streitige Verfahren?

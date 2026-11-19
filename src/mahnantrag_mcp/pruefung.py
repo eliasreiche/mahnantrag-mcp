@@ -85,12 +85,24 @@ def _iban_ok(iban: str) -> bool:
     return int(n) % 97 == 1
 
 
+EINZELUNTERNEHMEN_RECHTSFORM = ("37", "87")  # Einzelfirma / Eingetragener Kaufmann
+
+
 def _partei(b: Pruefbericht, wo: str, p: NatuerlichePerson | Firma) -> None:
     if isinstance(p, NatuerlichePerson):
         _pflicht(b, f"{wo} Vorname", p.vorname)
         _pflicht(b, f"{wo} Nachname", p.nachname)
         _laenge(b, f"{wo} Vorname", p.vorname, 35)
-        _laenge(b, f"{wo} Nachname", p.nachname, 35)
+        if p.geschaeftsbezeichnung:
+            _laenge(b, f"{wo} Nachname mit Geschäftsbezeichnung ('{p.nachname_portal}')", p.nachname_portal, 35)
+            b.warnungen.append(
+                f"{wo}: Einzelunternehmen wird als natürliche Person erfasst, die Geschäftsbezeichnung steht hinter dem "
+                f"Nachnamen ('{p.nachname_portal}'). Das Portal bildet Einzelunternehmen nicht eigens ab; diese Erfassung "
+                "ist ein Praxishinweis, keine Vorgabe. Bitte vom Menschen bestätigen lassen, dass es so gehandhabt "
+                "werden soll, und den Wortlaut prüfen: er erscheint so im Bescheid und im Titel."
+            )
+        else:
+            _laenge(b, f"{wo} Nachname", p.nachname, 35)
         _adresse(b, wo, p.adresse)
         return
     for i, z in enumerate(p.name_zeilen, 1):
@@ -113,7 +125,14 @@ def _partei(b: Pruefbericht, wo: str, p: NatuerlichePerson | Firma) -> None:
     if not p.gesetzliche_vertreter:
         b.fehler.append(
             f"{wo}: Kein gesetzlicher Vertreter angegeben (§ 690 Abs. 1 Nr. 1 ZPO). "
-            "Firmen ohne Vertreter (z. B. e.K.) sind in v0.1 nicht abgebildet."
+            "Firmen ohne Vertreter sind in v0.1 nicht abgebildet. Ein Einzelunternehmen (auch e.K.) lässt sich "
+            "stattdessen als natürliche Person mit 'geschaeftsbezeichnung' erfassen, wenn der Mensch das so will."
+        )
+    elif p.rechtsform_code in EINZELUNTERNEHMEN_RECHTSFORM:
+        b.warnungen.append(
+            f"{wo}: Rechtsform '{kataloge.rechtsformen().get(p.rechtsform_code, p.rechtsform_code)}' mit gesetzlichem "
+            "Vertreter. Ein Einzelunternehmen hat keinen gesetzlichen Vertreter; Partei ist der Inhaber. Prüfen, ob "
+            "die Erfassung als natürliche Person mit 'geschaeftsbezeichnung' gemeint ist."
         )
     if len(p.gesetzliche_vertreter) > 1:
         b.fehler.append(f"{wo}: Mehr als ein gesetzlicher Vertreter ist in v0.1 nicht abgebildet.")

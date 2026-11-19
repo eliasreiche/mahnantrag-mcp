@@ -23,6 +23,9 @@ Namen oder eine doppelt eingetragene vorgerichtliche Anwaltsvergütung gehen ohn
 `antrag_pruefen` fängt unter anderem ab:
 
 - Feldlängen des Portals (Firmenname 35 Zeichen je Zeile, Ort 27, Kennziffer 8 Ziffern …)
+- Einzelunternehmen: Das Portal bildet sie nicht eigens ab. Auf Wunsch wird der Inhaber als natürliche Person
+  erfasst und die Geschäftsbezeichnung hinter den Nachnamen gesetzt (`geschaeftsbezeichnung`, zusammen höchstens
+  35 Zeichen). Das ist ein Praxishinweis, keine Vorgabe; Claude fragt vorher, ob es so gehandhabt werden soll
 - Katalogcodes (75 Anspruchsarten, 178 Rechtsformen, Belegarten, Auslagenarten)
 - PLZ, IBAN-Prüfziffer, Daten in der Zukunft
 - vorgerichtliche Anwaltsvergütung als Haupt- **und** Nebenforderung (verdoppelt die Forderung)

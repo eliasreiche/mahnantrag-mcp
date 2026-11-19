@@ -65,7 +65,22 @@ class NatuerlichePerson(_Basis):
     anrede: Literal["Herr", "Frau"]
     vorname: str
     nachname: str
+    geschaeftsbezeichnung: str = Field(
+        "",
+        description=(
+            "Nur bei Einzelunternehmen (auch e.K.): Zusatz, der wörtlich hinter den Nachnamen gesetzt wird, "
+            "z. B. 'Inh. Malerbetrieb Müller' -> 'Müller, Inh. Malerbetrieb Müller'. Partei bleibt der Inhaber als "
+            "natürliche Person. Nachname, Komma und Zusatz dürfen zusammen höchstens 35 Zeichen haben; den Wortlaut "
+            "legt der Mensch fest, weil er so im Bescheid und im Titel erscheint. Nur setzen, wenn der Mensch dieser "
+            "Erfassung ausdrücklich zugestimmt hat."
+        ),
+    )
     adresse: Adresse
+
+    @property
+    def nachname_portal(self) -> str:
+        """Inhalt des Portalfelds Nachname: Nachname, bei Einzelunternehmen mit angehängter Geschäftsbezeichnung."""
+        return f"{self.nachname}, {self.geschaeftsbezeichnung}" if self.geschaeftsbezeichnung else self.nachname
 
 
 class GesetzlicherVertreter(_Basis):

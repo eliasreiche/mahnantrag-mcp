@@ -41,6 +41,9 @@ Regeln:
   ausfuellen_fortsetzen mit genau diesem Gerichtsnamen aufrufen.
 - Katalognummern und Rechtsform-Codes nur aus kataloge_suchen nehmen.
 - Der Firmenname wird mit Rechtsformzusatz eingetragen; Zeilenumbrüche über 35 Zeichen legt der Mensch fest.
+- Einzelunternehmen (Inhaberbetrieb, Einzelfirma, e.K.): Das Portal bildet sie nicht eigens ab. Den Menschen
+  darauf hinweisen und fragen, ob der Inhaber als natürliche Person mit `geschaeftsbezeichnung` hinter dem
+  Nachnamen erfasst werden soll. Nur nach Zustimmung setzen; den Wortlaut des Zusatzes legt der Mensch fest.
 - eda_herunterladen erst, nachdem der Mensch die Datenübersicht gesehen und ausdrücklich freigegeben hat.
   Die Freigabe-Parameter nie ohne diese Freigabe setzen.
 - Die heruntergeladene Datei nie öffnen, umschreiben oder neu speichern. Sie geht unverändert per beA ans Mahngericht.

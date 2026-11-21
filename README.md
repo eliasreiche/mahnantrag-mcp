@@ -64,10 +64,17 @@ Beim Barcode-Weg hält der Ausfüller auf der Übersicht an; Druck und Unterschr
 
 ## Installation
 
-Voraussetzungen: [uv](https://docs.astral.sh/uv/), Google Chrome (sonst `uv run playwright install chromium`).
+Voraussetzungen: Google Chrome (sonst `uv run playwright install chromium`), macOS oder Linux.
 
 **Als Plugin (Claude Code / Claude Desktop):** Marketplace `eliasreiche/mahnantrag-mcp` hinzufügen
-und Plugin `mahnantrag` installieren. 
+und Plugin `mahnantrag` installieren. uv muss nicht vorinstalliert sein: Das Startskript
+`bin/mahnantrag-start.sh` sucht uv an den üblichen Orten und lädt es sonst beim ersten Start einmalig
+ohne Adminrechte nach `~/.local/share/mahnantrag-mcp/uv` (fest gepinnte Version aus den GitHub-Releases
+von astral-sh/uv, geprüft gegen die im Skript eingetragene SHA-256; kein Installer-Skript, kein Eingriff
+in PATH oder Shell-Profile). Danach lädt uv Python und die Abhängigkeiten;
+der erste Start dauert deshalb etwa eine Minute. Wo die Kanzlei-IT Downloads aus dem Netz sperrt, uv
+vorab zentral verteilen (z. B. per MDM) oder `MAHNANTRAG_UV_HOME` auf einen Ordner mit einer
+freigegebenen `uv`-Datei setzen. Windows: uv manuell installieren und den Server direkt einbinden (unten).
 
 **Direkt als MCP-Server:**
 
@@ -82,6 +89,7 @@ Umgebungsvariablen (optional):
 | `MAHNANTRAG_AUSGABE` | Zielordner für EDA-Dateien (Standard `~/Documents/Mahnantraege`); je Antrag ein Unterordner `<Zeitpunkt>_<Geschäftszeichen>`, darin die Datei unter dem **unveränderten Portal-Namen** (z. B. `EDA_MBA_09_11_2026_930226_<32 Hex>.eda`), schreibgeschützt |
 | `MAHNANTRAG_BROWSER_KANAL` | Playwright-Kanal (Standard `chrome`) |
 | `MAHNANTRAG_BROWSER_PFAD` | expliziter Pfad zu einem Chromium |
+| `MAHNANTRAG_UV_HOME` | Ordner, in dem das Startskript uv sucht bzw. installiert (Standard `~/.local/share/mahnantrag-mcp/uv`) |
 
 ## Datenschutz und Berufsrecht
 

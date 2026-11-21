@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "mahnantrag": {
-      "command": "uv",
-      "args": ["run", "--directory", "${CLAUDE_PLUGIN_ROOT}", "mahnantrag-mcp"]
+      "command": "sh",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/mahnantrag-start.sh"]
     }
   }
 }

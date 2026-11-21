@@ -140,8 +140,12 @@ class LaufendeZinsen(_Basis):
     zinssatz: Decimal = Field(description="Prozentsatz bzw. Prozentpunkte, z. B. 9 für '9 Punkte über Basiszins'")
     ueber_basiszins: bool = Field(description="True = Prozentpunkte über dem Basiszinssatz (§ 288 BGB)")
     turnus: Literal["jaehrlich", "monatlich", "taeglich"] = "jaehrlich"
-    ab: date
-    bis: date | None = Field(None, description="Leer = bis Zustellung des Mahnbescheids bzw. laufend")
+    ab: date | None = Field(
+        None,
+        description="Zinsbeginn. Leer = das Portal verzinst ab Zustellung des Mahnbescheids (Rechtshängigkeit, "
+        "§ 291 BGB, § 696 Abs. 3 ZPO); Verzugszinsen für die Zeit davor entfallen dann",
+    )
+    bis: date | None = Field(None, description="Zinsende. Leer = laufend bis zur Zahlung")
     zu_verzinsender_betrag: Decimal | None = Field(None, description="Nur wenn abweichend von der Hauptforderung")
 
 

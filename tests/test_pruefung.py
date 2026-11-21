@@ -444,3 +444,12 @@ def test_firma_ohne_vertreter_nennt_personen_weg():
 def test_einzelfirma_mit_vertreter_warnt():
     b = bericht(lambda d: d["antragsgegner"].update(rechtsform_code="87"))
     assert any("Einzelunternehmen hat keinen gesetzlichen Vertreter" in w for w in b.warnungen)
+
+
+def test_zinsbeginn_leer_heisst_ab_zustellung():
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].pop("ab"))
+    assert b.zulaessig, b.fehler
+    assert any("ab Zustellung des Mahnbescheids" in w for w in b.warnungen)
+    b = bericht(lambda d: d["ansprueche"][0]["zinsen"].update(ab=None, bis="2026-10-01"))
+    assert any("Zins-Ende liegt vor der Zustellung" in f for f in b.fehler)
+    assert fmt.datum(None) == ""

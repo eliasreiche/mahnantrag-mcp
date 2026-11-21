@@ -447,7 +447,9 @@ gegenlesen.
 die dynamische Variante muss das Skript nicht nachrechnen und der Antrag veraltet nicht.
 Im Testlauf war die Checkbox **nicht** gesetzt (Anzeige "mit jährlich 9,000 %" ohne Zusatz) —
 für den Echtbetrieb prüfen.
-`_bBis` leer lassen: "Ab Zustellung des Mahnbescheids wenn kein Datum angegeben."
+**`_bVon` leer lassen = Zinsen ab Zustellung des Mahnbescheids** (Portal-Hinweis unter dem Zeitraum:
+"Ab Zustellung des Mahnbescheids wenn kein Datum angegeben"; Rechtshängigkeit, § 291 BGB, § 696 Abs. 3 ZPO).
+`_bBis` leer = Zinsen laufen bis zur Zahlung.
 
 **FALLE: erneutes Wählen von `Zinsen` legt einen NEUEN Eintrag an, keinen Änderungsmodus.**
 Die Maske kommt leer hoch, obwohl bereits Zinsen erfasst sind. Ein Skript, das nach einem

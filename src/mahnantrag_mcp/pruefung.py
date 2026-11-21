@@ -255,12 +255,21 @@ def pruefen(a: Antrag, heute: date | None = None) -> Pruefbericht:
             z = asp.zinsen
             _zinssatz(b, f"{wo} Zinsen", z.zinssatz, z.ueber_basiszins)
             _positiv(b, f"{wo} zu verzinsender Betrag", z.zu_verzinsender_betrag)
-            if z.bis and z.bis < z.ab:
-                b.fehler.append(f"{wo}: Zins-Ende liegt vor dem Zinsbeginn.")
-            if z.ab > heute:
-                b.warnungen.append(f"{wo}: Zinsbeginn liegt in der Zukunft.")
-            if z.ab < asp.datum_von:
-                b.warnungen.append(f"{wo}: Zinsbeginn liegt vor dem Anspruchsdatum.")
+            if z.ab is None:
+                # Portal-Regel: ohne Datum laufen die Zinsen ab Zustellung des Mahnbescheids
+                b.warnungen.append(
+                    f"{wo}: kein Zinsbeginn angegeben. Das Portal verzinst dann ab Zustellung des Mahnbescheids "
+                    "(Rechtshängigkeit, § 291 BGB); Verzugszinsen für die Zeit davor werden nicht geltend gemacht."
+                )
+                if z.bis and z.bis < heute:
+                    b.fehler.append(f"{wo}: Zins-Ende liegt vor der Zustellung des Mahnbescheids (Zinsbeginn ohne Datum).")
+            else:
+                if z.bis and z.bis < z.ab:
+                    b.fehler.append(f"{wo}: Zins-Ende liegt vor dem Zinsbeginn.")
+                if z.ab > heute:
+                    b.warnungen.append(f"{wo}: Zinsbeginn liegt in der Zukunft.")
+                if z.ab < asp.datum_von:
+                    b.warnungen.append(f"{wo}: Zinsbeginn liegt vor dem Anspruchsdatum.")
             if z.ueber_basiszins:
                 # Ob ein Verbraucher beteiligt ist, ist eine Rechtsfrage (§ 13 BGB) und wird nicht aus der
                 # Parteiform geraten: der Mensch entscheidet es in `entscheidungen.verbraucher_beteiligt`.

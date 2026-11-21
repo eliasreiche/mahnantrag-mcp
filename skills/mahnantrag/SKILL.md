@@ -29,6 +29,8 @@ schickt der Mensch über beA an das Mahngericht.
    - Gegenstandswert der vorgerichtlichen Tätigkeit oder Anrechnungsbetrag ohne vorgerichtliche Vergütung:
      Ist das so gewollt (`vorgerichtlich_ohne_verguetung_bestaetigt`)? Nur dann quittiert der Ausfüller die Portal-Warnung.
    - Bei mehr als 5 Punkten über Basiszins (auch über 9): Ist ein Verbraucher beteiligt (§ 288 BGB)?
+   - Laufende Zinsen: ab welchem Datum? Ohne Datum verzinst das Portal ab Zustellung des Mahnbescheids
+     (Rechtshängigkeit, § 291 BGB); Verzugszinsen für die Zeit davor entfallen dann.
 3. **`antrag_pruefen`.** Fehler und Warnungen wörtlich zeigen. Fehler löst der Mensch.
    Firmennamen über 35 Zeichen bricht der Mensch um, weil der Umbruch im Bescheid erscheint.
 4. **`portal_ausfuellen`** mit `sichtbar=true`, nachdem der Mensch dem Datenschutzhinweis des
